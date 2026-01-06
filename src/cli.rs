@@ -40,7 +40,7 @@ pub enum RepoAction {
     },
 
     /// Delete a repository
-    #[command(visible_aliases = ["remove", "rm"])]
+    #[command(visible_aliases = ["remove", "rm", "del"])]
     Delete {
         /// Repository URL to delete
         url: String,
