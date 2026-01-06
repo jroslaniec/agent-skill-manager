@@ -14,7 +14,9 @@ fn main() {
         Command::Skills { action } => match action {
             SkillAction::Enable { skill_name_or_ref } => commands::skill::enable(&skill_name_or_ref),
             SkillAction::Disable { skill_name_or_ref } => commands::skill::disable(&skill_name_or_ref),
-            SkillAction::List => commands::skill::list(),
+            SkillAction::List { all, status, name_only } => {
+                commands::skill::list(all, status.as_deref(), name_only)
+            }
         },
         Command::Cache { action } => match action {
             CacheAction::Dir => commands::cache::dir(),

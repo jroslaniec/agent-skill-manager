@@ -71,7 +71,19 @@ pub enum SkillAction {
 
     /// List all skills
     #[command(visible_aliases = ["ls"])]
-    List,
+    List {
+        /// Show all skills (enabled and disabled)
+        #[arg(short, long)]
+        all: bool,
+
+        /// Filter by status (enabled or disabled)
+        #[arg(long)]
+        status: Option<String>,
+
+        /// Show only skill names (one per line)
+        #[arg(long)]
+        name_only: bool,
+    },
 }
 
 #[derive(Debug, Subcommand)]

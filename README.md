@@ -72,6 +72,7 @@ sm skill disable git-commit
 ```bash
 # List skills
 sm skills list
+sm skills list --all
 
 # List repositories
 sm repo list

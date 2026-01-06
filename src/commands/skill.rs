@@ -201,7 +201,7 @@ pub fn disable(skill_name_or_ref: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn list() -> Result<()> {
+pub fn list(all: bool, status: Option<&str>, name_only: bool) -> Result<()> {
     let lock = ConfigLock::acquire()?;
     let config = lock.read_config()?;
 
@@ -210,35 +210,92 @@ pub fn list() -> Result<()> {
         return Ok(());
     }
 
+    // Validate status filter if provided
+    if let Some(s) = status {
+        if s != "enabled" && s != "disabled" {
+            bail!("Invalid status '{}'. Use 'enabled' or 'disabled'.", s);
+        }
+    }
+
     // Collect and sort skills by name
     let mut skills: Vec<_> = config.skills.iter().collect();
     skills.sort_by_key(|(name, _)| *name);
 
-    // Print header
-    println!(
-        "{:<30}  {:<10}  {}",
-        style("SKILL").bold(),
-        style("STATUS").bold(),
-        style("REPOSITORY").bold()
-    );
+    // Filter skills based on flags
+    let filtered_skills: Vec<_> = skills
+        .into_iter()
+        .filter(|(_, skill)| {
+            // If --all is set, show all
+            if all {
+                return true;
+            }
 
-    // Print separator
-    println!("{}", "-".repeat(80));
+            // If --status is set, filter by status
+            if let Some(s) = status {
+                return if s == "enabled" {
+                    skill.enabled
+                } else {
+                    !skill.enabled
+                };
+            }
 
-    // Print each skill
-    for (name, skill) in skills {
-        let status = if skill.enabled {
-            style("enabled").green()
+            // Default: show only enabled skills
+            skill.enabled
+        })
+        .collect();
+
+    if filtered_skills.is_empty() {
+        if status.is_some() {
+            println!("No {} skills found.", status.unwrap());
+        } else if all {
+            println!("No skills found.");
         } else {
-            style("disabled").dim()
-        };
+            println!("No enabled skills found.");
+        }
+        return Ok(());
+    }
 
+    // Output format: name-only or table
+    if name_only {
+        for (name, _) in filtered_skills {
+            println!("{}", name);
+        }
+    } else {
+        // Print header
         println!(
             "{:<30}  {:<10}  {}",
-            style(name).cyan(),
-            status,
-            style(&skill.repository).dim()
+            style("SKILL").bold(),
+            style("STATUS").bold(),
+            style("REPOSITORY").bold()
         );
+
+        // Print separator
+        println!("{}", "-".repeat(80));
+
+        // Print each skill
+        for (name, skill) in filtered_skills {
+            let status = if skill.enabled {
+                style("enabled").green()
+            } else {
+                style("disabled").dim()
+            };
+
+            println!(
+                "{:<30}  {:<10}  {}",
+                style(name).cyan(),
+                status,
+                style(&skill.repository).dim()
+            );
+        }
+
+        // Show helper message when default view (enabled only) is shown
+        if !all && status.is_none() {
+            println!();
+            println!(
+                "{}",
+                style("To see all skills use: sm skills list --all").dim()
+            );
+        }
     }
 
     Ok(())
