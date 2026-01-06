@@ -754,18 +754,47 @@ fn add_interactive(lock: &ConfigLock, skill_refs: &[String]) -> Result<()> {
         // Get current SHA
         let current_sha = git::get_current_sha(&repo_cache_path).ok();
 
-        // Add repository to config
+        // Scan for skills before adding repository
+        let scan_path = if repo_ref.path.is_empty() {
+            repo_cache_path.clone()
+        } else {
+            repo_cache_path.join(&repo_ref.path)
+        };
+
+        let available_skills = scan_for_skills(&scan_path)?;
+
+        if available_skills.is_empty() {
+            println!("No skills found in repository");
+            return Ok(());
+        }
+
+        // Add repository to config and register all skills as disabled
         lock.update(|config| {
-            config.add_repository(repo_id.clone(), repo_ref.git_url(), String::new(), current_sha, None);
+            config.add_repository(repo_id.clone(), repo_ref.git_url(), repo_ref.path.clone(), current_sha, None);
+
+            // Register all detected skills as disabled
+            for skill_name in &available_skills {
+                let skill_path = if repo_ref.path.is_empty() {
+                    skill_name.clone()
+                } else {
+                    format!("{}/{}", repo_ref.path, skill_name)
+                };
+
+                if !config.has_skill(skill_name) {
+                    config.add_skill(skill_name.clone(), repo_id.clone(), skill_path);
+                    config.disable_skill(skill_name).ok();
+                }
+            }
+
             Ok(())
         })?;
 
-        println!("Added repository {}", style(&repo_id).cyan());
+        println!("Added repository {} ({} skills)", style(&repo_id).cyan(), available_skills.len());
     } else {
         println!("Repository {} already registered", style(&repo_id).cyan());
     }
 
-    // Scan for skills in this repository
+    // Scan for skills to show in interactive UI
     let scan_path = if repo_ref.path.is_empty() {
         repo_cache_path.clone()
     } else {
@@ -773,11 +802,6 @@ fn add_interactive(lock: &ConfigLock, skill_refs: &[String]) -> Result<()> {
     };
 
     let skill_names = scan_for_skills(&scan_path)?;
-
-    if skill_names.is_empty() {
-        println!("No skills found in repository");
-        return Ok(());
-    }
 
     // Build skill items for this repository
     #[derive(Debug, Clone)]
