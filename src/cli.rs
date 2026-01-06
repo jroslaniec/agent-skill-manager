@@ -64,6 +64,13 @@ pub enum Command {
         #[arg(short, long)]
         force: bool,
     },
+
+    /// Upgrade all unpinned repositories
+    Upgrade {
+        /// Skip confirmation prompt
+        #[arg(short, long)]
+        force: bool,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -88,6 +95,24 @@ pub enum RepoAction {
     /// List all registered repositories
     #[command(visible_aliases = ["ls"])]
     List,
+
+    /// Pin a repository to its current commit
+    Pin {
+        /// Repository URL to pin
+        url: String,
+    },
+
+    /// Unpin a repository to allow upgrades
+    Unpin {
+        /// Repository URL to unpin
+        url: String,
+    },
+
+    /// Upgrade a repository to latest or specific commit
+    Upgrade {
+        /// Repository URL (with optional @SHA)
+        url: String,
+    },
 }
 
 #[derive(Debug, Subcommand)]

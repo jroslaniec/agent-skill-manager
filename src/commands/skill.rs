@@ -96,7 +96,7 @@ pub fn enable(skill_name_or_ref: &str) -> Result<()> {
 
         // Add repository to config and persist
         lock.update(|config| {
-            config.add_repository(repo_id.clone(), skill.git_url(), String::new());
+            config.add_repository(repo_id.clone(), skill.git_url(), String::new(), None, None);
             Ok(())
         })?;
     }
@@ -251,6 +251,8 @@ pub fn list(all: bool, status: Option<&str>, name_only: bool) -> Result<()> {
             println!("No skills found.");
         } else {
             println!("No enabled skills found.");
+            println!();
+            println!("{}", style("To see all skills use: sm skills list --all").dim());
         }
         return Ok(());
     }

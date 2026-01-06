@@ -16,6 +16,10 @@ pub struct Repository {
     pub path: String,  // Subdirectory path within repo (empty for root)
     #[serde(default = "chrono_now")]
     pub cloned_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_sha: Option<String>,  // Current checked-out commit (12 chars)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pinned_sha: Option<String>,   // If set, repo is pinned to this SHA
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -55,13 +59,15 @@ impl Config {
     }
 
     /// Add a repository
-    pub fn add_repository(&mut self, repo_id: String, url: String, path: String) {
+    pub fn add_repository(&mut self, repo_id: String, url: String, path: String, current_sha: Option<String>, pinned_sha: Option<String>) {
         self.repositories.insert(
             repo_id,
             Repository {
                 url,
                 path,
                 cloned_at: chrono_now(),
+                current_sha,
+                pinned_sha,
             },
         );
     }

@@ -54,6 +54,31 @@ repo-root/
 ```
 For this structure, use: `sm repo add github.com/owner/repo/tools/agent-skills`
 
+### Repository Version Management
+
+Pin repositories to specific commits to prevent accidental updates:
+
+```bash
+# Add repository pinned to specific commit
+sm repo add github.com/owner/repo@abc12345
+
+# Pin existing repository to current commit
+sm repo pin github.com/owner/repo
+
+# Unpin to allow upgrades
+sm repo unpin github.com/owner/repo
+
+# Upgrade to latest commit
+sm repo upgrade github.com/owner/repo
+
+# Upgrade to specific commit (auto-pins)
+sm repo upgrade github.com/owner/repo@abc12345
+
+# Upgrade all unpinned repositories
+sm upgrade
+sm upgrade --force  # Skip confirmation
+```
+
 ### Enable/Disable Skills
 
 ```bash

@@ -79,15 +79,36 @@ impl SkillRef {
 pub struct RepoRef {
     pub owner: String,
     pub repo: String,
-    pub path: String,  // Subdirectory path within repo (empty string for root)
+    pub path: String,         // Subdirectory path within repo (empty string for root)
+    pub sha: Option<String>,  // Optional SHA from @suffix (e.g., @abc12345)
 }
 
 impl RepoRef {
     /// Parse a repository reference like:
     /// - github.com/owner/repo
     /// - github.com/owner/repo/nested/skills
+    /// - github.com/owner/repo@abc12345
+    /// - github.com/owner/repo/nested/skills@abc12345
     pub fn parse(reference: &str) -> Result<Self> {
         let reference = reference.trim();
+
+        // Split on @ to extract SHA if present
+        let (reference, sha) = if let Some(at_pos) = reference.rfind('@') {
+            let (ref_part, sha_part) = reference.split_at(at_pos);
+            let sha_str = &sha_part[1..]; // Skip the @ character
+
+            // Validate SHA: must be 7-40 hexadecimal characters
+            if sha_str.len() < 7 || sha_str.len() > 40 {
+                bail!("Invalid SHA: must be between 7 and 40 characters");
+            }
+            if !sha_str.chars().all(|c| c.is_ascii_hexdigit()) {
+                bail!("Invalid SHA: must contain only hexadecimal characters");
+            }
+
+            (ref_part, Some(sha_str.to_string()))
+        } else {
+            (reference, None)
+        };
 
         // Remove github.com prefix if present
         let reference = reference
@@ -111,7 +132,7 @@ impl RepoRef {
             String::new()
         };
 
-        Ok(Self { owner, repo, path })
+        Ok(Self { owner, repo, path, sha })
     }
 
     /// Get the repository identifier (github.com/owner/repo)
@@ -175,5 +196,41 @@ mod tests {
     fn test_parse_repo_ref_with_path() {
         let repo = RepoRef::parse("github.com/jroslaniec/agent-skills/nested/skills").unwrap();
         assert_eq!(repo.path, "nested/skills");
+    }
+
+    #[test]
+    fn test_parse_repo_ref_with_sha() {
+        let repo = RepoRef::parse("github.com/jroslaniec/agent-skills@489c9d85").unwrap();
+        assert_eq!(repo.owner, "jroslaniec");
+        assert_eq!(repo.repo, "agent-skills");
+        assert_eq!(repo.path, "");
+        assert_eq!(repo.sha, Some("489c9d85".to_string()));
+    }
+
+    #[test]
+    fn test_parse_repo_ref_with_full_sha() {
+        let repo = RepoRef::parse("github.com/jroslaniec/agent-skills@489c9d85c422a184feb9f56dc7e60e4af721a131").unwrap();
+        assert_eq!(repo.sha, Some("489c9d85c422a184feb9f56dc7e60e4af721a131".to_string()));
+    }
+
+    #[test]
+    fn test_parse_repo_ref_with_path_and_sha() {
+        let repo = RepoRef::parse("github.com/anthropics/skills/skills@abc12345").unwrap();
+        assert_eq!(repo.owner, "anthropics");
+        assert_eq!(repo.repo, "skills");
+        assert_eq!(repo.path, "skills");
+        assert_eq!(repo.sha, Some("abc12345".to_string()));
+    }
+
+    #[test]
+    fn test_parse_repo_ref_invalid_sha_too_short() {
+        let result = RepoRef::parse("github.com/owner/repo@abc");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_repo_ref_invalid_sha_non_hex() {
+        let result = RepoRef::parse("github.com/owner/repo@xyz12345");
+        assert!(result.is_err());
     }
 }

@@ -10,6 +10,9 @@ fn main() {
             RepoAction::Add { url } => commands::repo::add(&url),
             RepoAction::Delete { url, force } => commands::repo::delete(&url, force),
             RepoAction::List => commands::repo::list(),
+            RepoAction::Pin { url } => commands::repo::pin(&url),
+            RepoAction::Unpin { url } => commands::repo::unpin(&url),
+            RepoAction::Upgrade { url } => commands::repo::upgrade(&url),
         },
         Command::Skills { action } => match action {
             SkillAction::Enable { skill_name_or_ref } => commands::skill::enable(&skill_name_or_ref),
@@ -28,6 +31,7 @@ fn main() {
             commands::skill::list(all, status.as_deref(), name_only)
         }
         Command::Purge { force } => commands::purge::purge(force),
+        Command::Upgrade { force } => commands::repo::upgrade_all(force),
     };
 
     if let Err(e) = result {
