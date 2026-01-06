@@ -1,12 +1,238 @@
 use anyhow::{bail, Context, Result};
 use console::style;
+use std::collections::HashMap;
 use std::os::unix::fs as unix_fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::config::ConfigLock;
 use crate::git;
 use crate::paths;
 use crate::skill_ref::{RepoRef, SkillRef};
+
+pub fn add(skill_refs: &[String]) -> Result<()> {
+    let lock = ConfigLock::acquire()?;
+
+    // Parse all skill references
+    let mut skills: Vec<SkillRef> = Vec::new();
+    for skill_ref in skill_refs {
+        match SkillRef::parse(skill_ref) {
+            Ok(skill) => skills.push(skill),
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+        }
+    }
+
+    // Group skills by repository
+    let mut skills_by_repo: HashMap<String, Vec<SkillRef>> = HashMap::new();
+    for skill in skills {
+        let repo_id = skill.repo_id();
+        skills_by_repo.entry(repo_id).or_insert_with(Vec::new).push(skill);
+    }
+
+    let mut had_errors = false;
+    let mut repos_to_check_updates: Vec<(String, bool)> = Vec::new(); // (repo_id, is_pinned)
+
+    // Process each repository
+    for (repo_id, repo_skills) in skills_by_repo {
+        let config = lock.read_config()?;
+        let first_skill = &repo_skills[0]; // Use first skill to get repo info
+
+        let git_cache = paths::git_cache_dir()?;
+        let repo_cache_path = git_cache.join(&first_skill.owner).join(&first_skill.repo);
+
+        // Check if repository exists
+        let repo_exists = config.has_repository(&repo_id);
+
+        if repo_exists {
+            // Repository in cache - use existing
+            println!("Repository {} in cache", style(&repo_id).cyan());
+
+            // Mark for update check later
+            let is_pinned = config.repositories.get(&repo_id)
+                .and_then(|r| r.pinned_sha.as_ref())
+                .is_some();
+            repos_to_check_updates.push((repo_id.clone(), is_pinned));
+        } else {
+            // New repository - clone it
+            if !repo_cache_path.exists() {
+                git::clone_repo(&first_skill.git_url(), &repo_cache_path)?;
+            }
+
+            // Get current SHA
+            let current_sha = git::get_current_sha(&repo_cache_path).ok();
+
+            // Scan for all skills in repo
+            // Need to scan the parent directory, not the skill directory itself
+            let scan_path = if first_skill.path.is_empty() {
+                repo_cache_path.clone()
+            } else if first_skill.path == first_skill.skill_name {
+                // Path is just the skill name (e.g., "git-commit"), scan repo root
+                repo_cache_path.clone()
+            } else {
+                // Path contains parent dirs (e.g., "skills/git-commit"), scan parent
+                let parent_path = first_skill.path.rsplitn(2, '/').nth(1).unwrap_or("");
+                if parent_path.is_empty() {
+                    repo_cache_path.clone()
+                } else {
+                    repo_cache_path.join(parent_path)
+                }
+            };
+
+            let available_skills = scan_for_skills(&scan_path)?;
+
+            // Determine the repository base path (parent of skills)
+            let repo_base_path = if first_skill.path.is_empty() {
+                String::new()
+            } else if first_skill.path == first_skill.skill_name {
+                // Path is just the skill name, repo base is empty
+                String::new()
+            } else {
+                // Path contains parent dirs, extract parent
+                first_skill.path.rsplitn(2, '/').nth(1).unwrap_or("").to_string()
+            };
+
+            // Add repository to config
+            lock.update(|config| {
+                config.add_repository(
+                    repo_id.clone(),
+                    first_skill.git_url(),
+                    repo_base_path.clone(),
+                    current_sha.clone(),
+                    None,
+                );
+
+                // Register all detected skills as disabled
+                for skill_name in &available_skills {
+                    let skill_path = if repo_base_path.is_empty() {
+                        skill_name.clone()
+                    } else {
+                        format!("{}/{}", repo_base_path, skill_name)
+                    };
+
+                    if !config.has_skill(skill_name) {
+                        config.add_skill(skill_name.clone(), repo_id.clone(), skill_path);
+                        config.disable_skill(skill_name).ok();
+                    }
+                }
+
+                Ok(())
+            })?;
+
+            println!(
+                "Added repository {} ({} skills)",
+                style(&repo_id).cyan(),
+                available_skills.len()
+            );
+        }
+
+        // Now enable the requested skills
+        for skill in &repo_skills {
+            let source_path = get_skill_source_path(skill)?;
+
+            // Verify skill path exists
+            if !source_path.exists() {
+                eprintln!(
+                    "Error: Skill path '{}' does not exist in repository {}",
+                    skill.path,
+                    repo_id
+                );
+                had_errors = true;
+                continue;
+            }
+
+            // Verify SKILL.md exists
+            let skill_md_path = source_path.join("SKILL.md");
+            if !skill_md_path.exists() {
+                eprintln!(
+                    "Error: SKILL.md not found in {}. Skills must contain a SKILL.md file.",
+                    source_path.display()
+                );
+                had_errors = true;
+                continue;
+            }
+
+            // Check if skill already exists
+            let config = lock.read_config()?;
+
+            if let Some(existing_skill) = config.skills.get(&skill.skill_name) {
+                // Skill exists - check if it's already enabled
+                if existing_skill.enabled {
+                    println!("Skill {} is already enabled", style(&skill.skill_name).cyan());
+                    continue;
+                }
+
+                // Skill exists but disabled - enable it
+                lock.update(|config| config.enable_skill(&skill.skill_name))?;
+
+                // Create symlink if needed
+                let skill_link_path = paths::claude_skills_dir()?.join(&skill.skill_name);
+                if !skill_link_path.exists() {
+                    create_skill_symlink(&source_path, &skill_link_path)?;
+                }
+
+                println!("Enabled {}", style(&skill.skill_name).cyan());
+            } else {
+                // Skill doesn't exist - check for name clash
+                if config.has_skill(&skill.skill_name) {
+                    eprintln!(
+                        "Error: Skill '{}' already exists. Skill names must be unique across all repositories.",
+                        skill.skill_name
+                    );
+                    had_errors = true;
+                    continue;
+                }
+
+                // Register and enable the skill
+                let claude_skills_dir = paths::claude_skills_dir()?;
+                if !claude_skills_dir.exists() {
+                    bail!(
+                        "Claude skills directory not found at {}.\nPlease ensure Claude Code is installed and the ~/.claude directory exists.",
+                        claude_skills_dir.display()
+                    );
+                }
+
+                let skill_link_path = claude_skills_dir.join(&skill.skill_name);
+                create_skill_symlink(&source_path, &skill_link_path)?;
+
+                lock.update(|config| {
+                    config.add_skill(skill.skill_name.clone(), repo_id.clone(), skill.path.clone());
+                    Ok(())
+                })?;
+
+                println!("Enabled {}", style(&skill.skill_name).cyan());
+            }
+        }
+    }
+
+    // Check for updates on cached repositories
+    for (repo_id, is_pinned) in repos_to_check_updates {
+        if let Some(has_updates) = check_for_updates(&repo_id)? {
+            if has_updates {
+                println!();
+                if is_pinned {
+                    println!(
+                        "Repository {} has updates available (pinned)",
+                        style(&repo_id).cyan()
+                    );
+                } else {
+                    println!(
+                        "Repository {} has updates available",
+                        style(&repo_id).cyan()
+                    );
+                }
+                println!("Run: sm repo upgrade {}", repo_id);
+            }
+        }
+    }
+
+    if had_errors {
+        std::process::exit(1);
+    }
+
+    Ok(())
+}
 
 pub fn enable(skill_names_or_refs: &[String]) -> Result<()> {
     let lock = ConfigLock::acquire()?;
@@ -337,4 +563,111 @@ fn create_skill_symlink(source: &PathBuf, link: &PathBuf) -> Result<()> {
         .context("Failed to create symlink")?;
 
     Ok(())
+}
+
+fn scan_for_skills(path: &Path) -> Result<Vec<String>> {
+    let mut skills = Vec::new();
+
+    if !path.exists() {
+        return Ok(skills);
+    }
+
+    // Read directory entries
+    let entries = std::fs::read_dir(path).context("Failed to read directory")?;
+
+    for entry in entries {
+        let entry = entry?;
+        let entry_path = entry.path();
+
+        // Check if it's a directory
+        if entry_path.is_dir() {
+            // Check if it contains SKILL.md
+            let skill_md = entry_path.join("SKILL.md");
+            if skill_md.exists() {
+                if let Some(skill_name) = entry_path.file_name() {
+                    skills.push(skill_name.to_string_lossy().to_string());
+                }
+            }
+        }
+    }
+
+    skills.sort();
+    Ok(skills)
+}
+
+fn check_for_updates(repo_id: &str) -> Result<Option<bool>> {
+    let lock = ConfigLock::acquire()?;
+    let config = lock.read_config()?;
+
+    let repo = match config.repositories.get(repo_id) {
+        Some(r) => r,
+        None => return Ok(None),
+    };
+
+    let current_sha = match &repo.current_sha {
+        Some(sha) => sha,
+        None => return Ok(None),
+    };
+
+    // Parse repo_id to get owner/repo
+    let parts: Vec<&str> = repo_id.split('/').collect();
+    if parts.len() < 2 {
+        return Ok(None);
+    }
+
+    let git_cache = paths::git_cache_dir()?;
+    let repo_cache_path = git_cache.join(parts[0]).join(parts[1]);
+
+    if !repo_cache_path.exists() {
+        return Ok(None);
+    }
+
+    // Fetch latest from origin
+    let fetch_output = std::process::Command::new("git")
+        .arg("fetch")
+        .arg("origin")
+        .arg("--quiet")
+        .current_dir(&repo_cache_path)
+        .output();
+
+    if fetch_output.is_err() {
+        return Ok(None);
+    }
+
+    // Get the default branch
+    let branch_output = std::process::Command::new("git")
+        .arg("symbolic-ref")
+        .arg("refs/remotes/origin/HEAD")
+        .arg("--short")
+        .current_dir(&repo_cache_path)
+        .output();
+
+    let default_branch = if let Ok(output) = branch_output {
+        if output.status.success() {
+            String::from_utf8_lossy(&output.stdout)
+                .trim()
+                .to_string()
+        } else {
+            "origin/main".to_string()
+        }
+    } else {
+        "origin/main".to_string()
+    };
+
+    // Get SHA of remote branch
+    let remote_sha_output = std::process::Command::new("git")
+        .arg("rev-parse")
+        .arg("--short=12")
+        .arg(&default_branch)
+        .current_dir(&repo_cache_path)
+        .output();
+
+    if let Ok(output) = remote_sha_output {
+        if output.status.success() {
+            let remote_sha = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            return Ok(Some(current_sha != &remote_sha));
+        }
+    }
+
+    Ok(None)
 }

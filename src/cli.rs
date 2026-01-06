@@ -30,6 +30,12 @@ pub enum Command {
         action: CacheAction,
     },
 
+    /// Add one or more skills (clones repo if needed and enables skills)
+    Add {
+        /// Skill references (e.g., "github.com/owner/repo/skill-name")
+        skill_refs: Vec<String>,
+    },
+
     /// Enable one or more skills (shortcut for 'skills enable')
     Enable {
         /// Skill names or references (e.g., "git-commit" or "github.com/owner/repo/git-commit")

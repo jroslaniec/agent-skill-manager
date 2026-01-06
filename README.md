@@ -22,7 +22,23 @@ cargo install --path .
 
 ## Usage
 
+### Add Skills
+
+Add skills to your global Claude Code configuration:
+
+```bash
+# Add a skill
+sm add github.com/anthropics/skills/skills/pdf
+
+# Add multiple skills
+sm add \
+  github.com/anthropics/skills/skills/pdf \
+  github.com/anthropics/skills/skills/docx
+```
+
 ### Add a Repository
+
+If you want to add a repository without enabling skills, use:
 
 ```bash
 sm repo add github.com/anthropics/skills/skills

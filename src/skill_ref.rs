@@ -58,9 +58,23 @@ impl SkillRef {
         })
     }
 
-    /// Get the repository identifier (github.com/owner/repo)
+    /// Get the repository identifier (github.com/owner/repo or github.com/owner/repo/path)
+    /// The repo ID includes the path to the directory containing skills
     pub fn repo_id(&self) -> String {
-        format!("github.com/{}/{}", self.owner, self.repo)
+        if self.path.is_empty() {
+            format!("github.com/{}/{}", self.owner, self.repo)
+        } else if self.path == self.skill_name {
+            // Path is just the skill name (skill at repo root)
+            format!("github.com/{}/{}", self.owner, self.repo)
+        } else {
+            // Path contains parent dirs, extract parent directory
+            let parent_path = self.path.rsplitn(2, '/').nth(1).unwrap_or("");
+            if parent_path.is_empty() {
+                format!("github.com/{}/{}", self.owner, self.repo)
+            } else {
+                format!("github.com/{}/{}/{}", self.owner, self.repo, parent_path)
+            }
+        }
     }
 
     /// Get the git clone URL
