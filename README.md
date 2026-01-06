@@ -2,11 +2,15 @@
 
 A CLI tool for managing Agent Skills.
 
-## Current Limitations
+**Current Limitations**:
 
 - Only GitHub repositories are supported
 - Only Claude Code is supported
 - Windows is not supported (uses Unix symlinks)
+
+## How it works
+
+The tool clones repositories containing skills to a local cache directory. When you enable a skill, it creates a symlink from `~/.claude/skills/<skill-name>` to the cached repository location. Disabling a skill removes the symlink while keeping the repository cached for fast re-enabling.
 
 ## Installation
 
