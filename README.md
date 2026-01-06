@@ -85,6 +85,9 @@ sm repo delete github.com/anthropics/skills/skills
 
 # Show cache directory location
 sm cache dir
+
+# Purge everything (remove all repositories, skills, and cache)
+sm purge
 ```
 
 ## Command Aliases
