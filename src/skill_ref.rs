@@ -149,9 +149,14 @@ impl RepoRef {
         Ok(Self { owner, repo, path, sha })
     }
 
-    /// Get the repository identifier (github.com/owner/repo)
+    /// Get the repository identifier (github.com/owner/repo or github.com/owner/repo/path)
+    /// The repo ID includes the path to the directory containing skills
     pub fn repo_id(&self) -> String {
-        format!("github.com/{}/{}", self.owner, self.repo)
+        if self.path.is_empty() {
+            format!("github.com/{}/{}", self.owner, self.repo)
+        } else {
+            format!("github.com/{}/{}/{}", self.owner, self.repo, self.path)
+        }
     }
 
     /// Get the full reference including path

@@ -21,6 +21,19 @@ pub fn add(url: &str) -> Result<()> {
         );
     }
 
+    // Check for conflicts with same git repo, different path
+    let git_repo_key = format!("{}/{}", repo_ref.owner, repo_ref.repo);
+    for (existing_repo_id, _) in &config.repositories {
+        if existing_repo_id.starts_with(&format!("github.com/{}", git_repo_key))
+            && existing_repo_id != &repo_ref.repo_id() {
+            bail!(
+                "Cannot add {}. A different path from the same git repository is already registered: {}\nOnly one skill repository per git repository is allowed.",
+                repo_ref.repo_id(),
+                existing_repo_id
+            );
+        }
+    }
+
     // Determine where to clone the repo
     let git_cache = paths::git_cache_dir()?;
     let repo_cache_path = git_cache

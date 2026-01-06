@@ -55,7 +55,20 @@ pub fn add(skill_refs: &[String]) -> Result<()> {
                 .is_some();
             repos_to_check_updates.push((repo_id.clone(), is_pinned));
         } else {
-            // New repository - clone it
+            // New repository - check for conflicts with same git repo, different path
+            let git_repo_key = format!("{}/{}", first_skill.owner, first_skill.repo);
+            for (existing_repo_id, _) in &config.repositories {
+                if existing_repo_id.starts_with(&format!("github.com/{}", git_repo_key))
+                    && existing_repo_id != &repo_id {
+                    bail!(
+                        "Cannot add {}. A different path from the same git repository is already registered: {}\nOnly one skill repository per git repository is allowed.",
+                        repo_id,
+                        existing_repo_id
+                    );
+                }
+            }
+
+            // Clone the git repository
             if !repo_cache_path.exists() {
                 git::clone_repo(&first_skill.git_url(), &repo_cache_path)?;
             }
