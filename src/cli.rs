@@ -3,9 +3,10 @@ use clap::{Parser, Subcommand};
 #[derive(Parser, Debug)]
 #[command(name = "sm")]
 #[command(version, about = "Agent Skill Manager - Manage your agent skills", long_about = None)]
+#[command(subcommand_required = false)]
 pub struct Args {
     #[command(subcommand)]
-    pub command: Command,
+    pub command: Option<Command>,
 }
 
 #[derive(Debug, Subcommand)]

@@ -1,6 +1,7 @@
 use anyhow::{bail, Context, Result};
 use console::style;
 use std::collections::HashMap;
+use std::io::IsTerminal;
 use std::os::unix::fs as unix_fs;
 use std::path::{Path, PathBuf};
 
@@ -249,7 +250,10 @@ pub fn add(skill_refs: &[String]) -> Result<()> {
 
 pub fn enable(skill_names_or_refs: &[String]) -> Result<()> {
     let lock = ConfigLock::acquire()?;
+    enable_with_lock(&lock, skill_names_or_refs)
+}
 
+fn enable_with_lock(lock: &ConfigLock, skill_names_or_refs: &[String]) -> Result<()> {
     for skill_name_or_ref in skill_names_or_refs {
         let config = lock.read_config()?;
 
@@ -401,7 +405,10 @@ pub fn enable(skill_names_or_refs: &[String]) -> Result<()> {
 
 pub fn disable(skill_names_or_refs: &[String]) -> Result<()> {
     let lock = ConfigLock::acquire()?;
+    disable_with_lock(&lock, skill_names_or_refs)
+}
 
+fn disable_with_lock(lock: &ConfigLock, skill_names_or_refs: &[String]) -> Result<()> {
     for skill_name_or_ref in skill_names_or_refs {
         let config = lock.read_config()?;
 
@@ -546,6 +553,152 @@ pub fn list(all: bool, status: Option<&str>, name_only: bool) -> Result<()> {
                 style("To see all skills use: sm skills list --all").dim()
             );
         }
+    }
+
+    Ok(())
+}
+
+pub fn manage() -> Result<()> {
+    // Check if running in an interactive terminal
+    if !std::io::stdin().is_terminal() {
+        bail!("Interactive mode requires a TTY. Please run this command in an interactive terminal.");
+    }
+
+    let lock = ConfigLock::acquire()?;
+    let config = lock.read_config()?;
+
+    // Check if there are any repositories
+    if config.repositories.is_empty() {
+        println!("No repositories registered.");
+        println!();
+        println!("Use 'sm repo add <url>' to add a repository first.");
+        return Ok(());
+    }
+
+    // Collect all available skills from all repositories
+    #[derive(Debug, Clone)]
+    struct SkillItem {
+        name: String,
+        repo_id: String,
+        full_ref: String,
+        enabled: bool,
+    }
+
+    let mut all_skills: Vec<SkillItem> = Vec::new();
+    let git_cache = paths::git_cache_dir()?;
+
+    for (repo_id, _repo_info) in &config.repositories {
+        // Parse repo_id to get owner/repo and path
+        // repo_id format: "github.com/owner/repo" or "github.com/owner/repo/path"
+        let parts: Vec<&str> = repo_id.split('/').collect();
+        if parts.len() < 3 {
+            continue;
+        }
+
+        let owner = parts[1];
+        let repo = parts[2];
+        let repo_path = if parts.len() > 3 {
+            parts[3..].join("/")
+        } else {
+            String::new()
+        };
+
+        let repo_cache_path = git_cache.join(owner).join(repo);
+        if !repo_cache_path.exists() {
+            continue;
+        }
+
+        // Determine scan path
+        let scan_path = if repo_path.is_empty() {
+            repo_cache_path.clone()
+        } else {
+            repo_cache_path.join(&repo_path)
+        };
+
+        // Scan for skills
+        let skills = scan_for_skills(&scan_path)?;
+
+        for skill_name in skills {
+            let full_ref = format!("{}/{}", repo_id, skill_name);
+
+            let enabled = config.skills.get(&skill_name)
+                .map(|s| s.enabled)
+                .unwrap_or(false);
+
+            all_skills.push(SkillItem {
+                name: skill_name,
+                repo_id: repo_id.clone(),
+                full_ref,
+                enabled,
+            });
+        }
+    }
+
+    if all_skills.is_empty() {
+        println!("No skills found in registered repositories.");
+        return Ok(());
+    }
+
+    // Sort skills by name
+    all_skills.sort_by(|a, b| a.name.cmp(&b.name));
+
+    // Build options for multi-select
+    let options: Vec<String> = all_skills
+        .iter()
+        .map(|s| format!("{} ({})", s.name, s.repo_id))
+        .collect();
+
+    // Get indices of currently enabled skills
+    let default_indices: Vec<usize> = all_skills
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| s.enabled)
+        .map(|(i, _)| i)
+        .collect();
+
+    // Show multi-select prompt
+    let selected = inquire::MultiSelect::new("Select skills:", options.clone())
+        .with_default(&default_indices)
+        .with_help_message("↑↓ to move, Space to toggle, Enter to save, Esc to cancel")
+        .with_formatter(&|_| String::new())
+        .without_filtering()
+        .prompt();
+
+    let selected_strings = match selected {
+        Ok(selections) => selections,
+        Err(_) => {
+            println!("Cancelled");
+            return Ok(());
+        }
+    };
+
+    // Determine what changed by comparing formatted strings
+    let mut to_enable: Vec<String> = Vec::new();
+    let mut to_disable: Vec<String> = Vec::new();
+
+    for skill in &all_skills {
+        let formatted = format!("{} ({})", skill.name, skill.repo_id);
+        let should_be_enabled = selected_strings.contains(&formatted);
+
+        if should_be_enabled && !skill.enabled {
+            to_enable.push(skill.full_ref.clone());
+        } else if !should_be_enabled && skill.enabled {
+            to_disable.push(skill.name.clone());
+        }
+    }
+
+    // Apply changes
+    if !to_enable.is_empty() {
+        enable_with_lock(&lock, &to_enable)?;
+    }
+
+    if !to_disable.is_empty() {
+        disable_with_lock(&lock, &to_disable)?;
+    }
+
+    // Show summary
+    if to_enable.is_empty() && to_disable.is_empty() {
+        println!("No changes made");
     }
 
     Ok(())

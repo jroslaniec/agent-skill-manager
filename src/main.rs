@@ -6,7 +6,8 @@ fn main() {
     let args = Args::parse();
 
     let result = match args.command {
-        Command::Repositories { action } => match action {
+        None => commands::skill::manage(),
+        Some(Command::Repositories { action }) => match action {
             RepoAction::Add { url } => commands::repo::add(&url),
             RepoAction::Delete { url, force } => commands::repo::delete(&url, force),
             RepoAction::List => commands::repo::list(),
@@ -14,25 +15,25 @@ fn main() {
             RepoAction::Unpin { url } => commands::repo::unpin(&url),
             RepoAction::Upgrade { url } => commands::repo::upgrade(&url),
         },
-        Command::Skills { action } => match action {
+        Some(Command::Skills { action }) => match action {
             SkillAction::Enable { skill_names_or_refs } => commands::skill::enable(&skill_names_or_refs),
             SkillAction::Disable { skill_names_or_refs } => commands::skill::disable(&skill_names_or_refs),
             SkillAction::List { all, status, name_only } => {
                 commands::skill::list(all, status.as_deref(), name_only)
             }
         },
-        Command::Cache { action } => match action {
+        Some(Command::Cache { action }) => match action {
             CacheAction::Dir => commands::cache::dir(),
         },
-        Command::Add { skill_refs } => commands::skill::add(&skill_refs),
+        Some(Command::Add { skill_refs }) => commands::skill::add(&skill_refs),
         // Shortcuts for skill commands
-        Command::Enable { skill_names_or_refs } => commands::skill::enable(&skill_names_or_refs),
-        Command::Disable { skill_names_or_refs } => commands::skill::disable(&skill_names_or_refs),
-        Command::List { all, status, name_only } => {
+        Some(Command::Enable { skill_names_or_refs }) => commands::skill::enable(&skill_names_or_refs),
+        Some(Command::Disable { skill_names_or_refs }) => commands::skill::disable(&skill_names_or_refs),
+        Some(Command::List { all, status, name_only }) => {
             commands::skill::list(all, status.as_deref(), name_only)
         }
-        Command::Purge { force } => commands::purge::purge(force),
-        Command::Upgrade { force } => commands::repo::upgrade_all(force),
+        Some(Command::Purge { force }) => commands::purge::purge(force),
+        Some(Command::Upgrade { force }) => commands::repo::upgrade_all(force),
     };
 
     if let Err(e) = result {
