@@ -1,6 +1,6 @@
 # Agent Skill Manager
 
-A CLI tool for managing Agent Skills.
+A CLI tool for managing [Agent Skills](https://agentskills.io).
 
 **Current Limitations**:
 
