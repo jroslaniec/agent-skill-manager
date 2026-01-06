@@ -22,6 +22,18 @@ cargo install --path .
 
 ## Usage
 
+### Interactive Mode
+
+The easiest way to manage skills is through the interactive UI:
+
+```bash
+# Manage all skills from all repositories
+sm
+
+# Add repository and interactively select skills
+sm add -i github.com/anthropics/skills/skills
+```
+
 ### Add Skills
 
 Add skills to your global Claude Code configuration:
@@ -34,6 +46,9 @@ sm add github.com/anthropics/skills/skills/pdf
 sm add \
   github.com/anthropics/skills/skills/pdf \
   github.com/anthropics/skills/skills/docx
+
+# Interactive mode - select skills from a repository
+sm add -i github.com/anthropics/skills/skills
 ```
 
 ### Add a Repository
@@ -98,6 +113,9 @@ sm upgrade --force  # Skip confirmation
 ### Enable/Disable Skills
 
 ```bash
+# Interactive mode (easiest)
+sm
+
 # Enable using full reference
 sm skill enable github.com/anthropics/skills/skills/pdf
 sm enable github.com/anthropics/skills/skills/pdf
