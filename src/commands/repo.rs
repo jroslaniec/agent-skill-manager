@@ -1,6 +1,7 @@
 use anyhow::{bail, Context, Result};
 use console::style;
 use std::io::{self, Write};
+use std::path::Path;
 
 use crate::config::ConfigLock;
 use crate::git;
@@ -13,10 +14,10 @@ pub fn add(url: &str) -> Result<()> {
 
     // Check if repository already exists
     let config = lock.read_config()?;
-    if config.has_repository(&repo_ref.full_ref()) {
+    if config.has_repository(&repo_ref.repo_id()) {
         bail!(
             "Repository '{}' is already registered. Use 'sm repo list' to see all repositories.",
-            repo_ref.full_ref()
+            repo_ref.repo_id()
         );
     }
 
@@ -33,11 +34,6 @@ pub fn add(url: &str) -> Result<()> {
             style(&repo_ref.repo_id()).cyan()
         );
         git::clone_repo(&repo_ref.git_url(), &repo_cache_path)?;
-    } else {
-        println!(
-            "Repository already cloned at {}",
-            style(repo_cache_path.display()).dim()
-        );
     }
 
     // Verify the path exists within the repository
@@ -55,19 +51,44 @@ pub fn add(url: &str) -> Result<()> {
         );
     }
 
-    // Add to config
+    // Scan for skills in the repository
+    let available_skills = scan_for_skills(&full_path)?;
+
+    // Add repository and register all skills as disabled
     lock.update(|config| {
         config.add_repository(
-            repo_ref.full_ref(),
+            repo_ref.repo_id(),
             repo_ref.git_url(),
             repo_ref.path.clone(),
         );
+
+        // Register all detected skills as disabled
+        for skill_name in &available_skills {
+            let skill_path = if repo_ref.path.is_empty() {
+                skill_name.clone()
+            } else {
+                format!("{}/{}", repo_ref.path, skill_name)
+            };
+
+            // Only add if not already registered
+            if !config.has_skill(skill_name) {
+                config.add_skill(
+                    skill_name.clone(),
+                    repo_ref.repo_id(),
+                    skill_path,
+                );
+                // Immediately disable it (add_skill enables by default)
+                config.disable_skill(skill_name).ok();
+            }
+        }
+
         Ok(())
     })?;
 
     println!(
-        "Added repository {}",
-        style(&repo_ref.full_ref()).cyan()
+        "Added repository {} ({} skills)",
+        style(&repo_ref.repo_id()).cyan(),
+        available_skills.len()
     );
 
     Ok(())
@@ -80,15 +101,15 @@ pub fn delete(url: &str, force: bool) -> Result<()> {
     let config = lock.read_config()?;
 
     // Check if repository exists
-    if !config.has_repository(&repo_ref.full_ref()) {
+    if !config.has_repository(&repo_ref.repo_id()) {
         bail!(
             "Repository '{}' not found. Use 'sm repo list' to see registered repositories.",
-            repo_ref.full_ref()
+            repo_ref.repo_id()
         );
     }
 
     // Check if any skills are using this repository
-    let skills = config.skills_for_repo(&repo_ref.full_ref());
+    let skills = config.skills_for_repo(&repo_ref.repo_id());
     let enabled_count = skills.iter().filter(|s| s.enabled).count();
 
     if enabled_count > 0 && !force {
@@ -96,7 +117,7 @@ pub fn delete(url: &str, force: bool) -> Result<()> {
             "{} {} enabled skill(s) from {} are registered.",
             style("Warning:").yellow(),
             enabled_count,
-            style(&repo_ref.full_ref()).cyan()
+            style(&repo_ref.repo_id()).cyan()
         );
         print!("Are you sure you want to remove all these skills? (yes/no): ");
         io::stdout().flush()?;
@@ -137,14 +158,14 @@ pub fn delete(url: &str, force: bool) -> Result<()> {
         }
 
         // Remove repository
-        config.remove_repository(&repo_ref.full_ref());
+        config.remove_repository(&repo_ref.repo_id());
 
         Ok(())
     })?;
 
     println!(
         "Removed repository {} and {} skill(s)",
-        style(&repo_ref.full_ref()).cyan(),
+        style(&repo_ref.repo_id()).cyan(),
         skill_names.len()
     );
 
@@ -174,10 +195,11 @@ pub fn list() -> Result<()> {
 
     // Print each repository
     for (repo_id, _repo) in &config.repositories {
+        // Get all skills for this repository
         let skills = config.skills_for_repo(repo_id);
-        let enabled_count = skills.iter().filter(|s| s.enabled).count();
         let total_count = skills.len();
-        let disabled_count = total_count - enabled_count;
+        let enabled_count = skills.iter().filter(|s| s.enabled).count();
+        let disabled_count = skills.iter().filter(|s| !s.enabled).count();
 
         println!(
             "{:<50}  {:>6}  {:>7}  {:>8}",
@@ -189,4 +211,35 @@ pub fn list() -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Scan a directory for skills (directories containing SKILL.md)
+fn scan_for_skills(path: &Path) -> Result<Vec<String>> {
+    let mut skills = Vec::new();
+
+    if !path.exists() {
+        return Ok(skills);
+    }
+
+    // Read directory entries
+    let entries = std::fs::read_dir(path).context("Failed to read directory")?;
+
+    for entry in entries {
+        let entry = entry?;
+        let entry_path = entry.path();
+
+        // Check if it's a directory
+        if entry_path.is_dir() {
+            // Check if it contains SKILL.md
+            let skill_md = entry_path.join("SKILL.md");
+            if skill_md.exists() {
+                if let Some(skill_name) = entry_path.file_name() {
+                    skills.push(skill_name.to_string_lossy().to_string());
+                }
+            }
+        }
+    }
+
+    skills.sort();
+    Ok(skills)
 }
