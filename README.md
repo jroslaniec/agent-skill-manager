@@ -28,6 +28,32 @@ cargo install --path .
 sm repo add github.com/jroslaniec/agent-skills
 ```
 
+Repositories should contain skill directories, each with a `SKILL.md` file:
+```
+repo-root/
+├── skill-name-1/
+│   └── SKILL.md
+├── skill-name-2/
+│   └── SKILL.md
+```
+
+You can also add a repository from a nested path:
+```bash
+sm repo add github.com/owner/repo/path/to/skills
+```
+
+Example with nested structure:
+```
+repo-root/
+├── tools/
+│   └── agent-skills/
+│       ├── skill-a/
+│       │   └── SKILL.md
+│       └── skill-b/
+│           └── SKILL.md
+```
+For this structure, use: `sm repo add github.com/owner/repo/tools/agent-skills`
+
 ### Enable/Disable Skills
 
 ```bash
