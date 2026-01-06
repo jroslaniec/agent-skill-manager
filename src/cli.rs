@@ -33,7 +33,11 @@ pub enum Command {
 
     /// Add one or more skills (clones repo if needed and enables skills)
     Add {
-        /// Skill references (e.g., "github.com/owner/repo/skill-name")
+        /// Interactive mode - select skills from a repository
+        #[arg(short, long)]
+        interactive: bool,
+
+        /// Skill references or repository URL (with -i flag)
         skill_refs: Vec<String>,
     },
 

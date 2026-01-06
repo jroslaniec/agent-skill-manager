@@ -10,8 +10,13 @@ use crate::git;
 use crate::paths;
 use crate::skill_ref::{RepoRef, SkillRef};
 
-pub fn add(skill_refs: &[String]) -> Result<()> {
+pub fn add(skill_refs: &[String], interactive: bool) -> Result<()> {
     let lock = ConfigLock::acquire()?;
+
+    // Handle interactive mode
+    if interactive {
+        return add_interactive(&lock, skill_refs);
+    }
 
     // Parse all skill references
     let mut skills: Vec<SkillRef> = Vec::new();
@@ -694,6 +699,164 @@ pub fn manage() -> Result<()> {
 
     if !to_disable.is_empty() {
         disable_with_lock(&lock, &to_disable)?;
+    }
+
+    // Show summary
+    if to_enable.is_empty() && to_disable.is_empty() {
+        println!("No changes made");
+    }
+
+    Ok(())
+}
+
+fn add_interactive(lock: &ConfigLock, skill_refs: &[String]) -> Result<()> {
+    // Check if running in an interactive terminal
+    if !std::io::stdin().is_terminal() {
+        bail!("Interactive mode requires a TTY. Please run this command in an interactive terminal.");
+    }
+
+    // Validate exactly one argument (the repository URL)
+    if skill_refs.len() != 1 {
+        bail!("Interactive mode requires exactly one repository URL.\nUsage: sm add -i <repository-url>");
+    }
+
+    let repo_url = &skill_refs[0];
+
+    // Parse as repository reference
+    let repo_ref = RepoRef::parse(repo_url)?;
+    let repo_id = repo_ref.repo_id();
+
+    let config = lock.read_config()?;
+    let git_cache = paths::git_cache_dir()?;
+    let repo_cache_path = git_cache.join(&repo_ref.owner).join(&repo_ref.repo);
+
+    // Add repository if it doesn't exist
+    if !config.has_repository(&repo_id) {
+        // Check for conflicts with same git repo, different path
+        let git_repo_key = format!("{}/{}", repo_ref.owner, repo_ref.repo);
+        for (existing_repo_id, _) in &config.repositories {
+            if existing_repo_id.starts_with(&format!("github.com/{}", git_repo_key))
+                && existing_repo_id != &repo_id {
+                bail!(
+                    "Cannot add {}. A different path from the same git repository is already registered: {}\nOnly one skill repository per git repository is allowed.",
+                    repo_id,
+                    existing_repo_id
+                );
+            }
+        }
+
+        // Clone the repository if needed
+        if !repo_cache_path.exists() {
+            println!("Cloning repository {}...", style(&repo_id).cyan());
+            git::clone_repo(&repo_ref.git_url(), &repo_cache_path)?;
+        }
+
+        // Get current SHA
+        let current_sha = git::get_current_sha(&repo_cache_path).ok();
+
+        // Add repository to config
+        lock.update(|config| {
+            config.add_repository(repo_id.clone(), repo_ref.git_url(), String::new(), current_sha, None);
+            Ok(())
+        })?;
+
+        println!("Added repository {}", style(&repo_id).cyan());
+    } else {
+        println!("Repository {} already registered", style(&repo_id).cyan());
+    }
+
+    // Scan for skills in this repository
+    let scan_path = if repo_ref.path.is_empty() {
+        repo_cache_path.clone()
+    } else {
+        repo_cache_path.join(&repo_ref.path)
+    };
+
+    let skill_names = scan_for_skills(&scan_path)?;
+
+    if skill_names.is_empty() {
+        println!("No skills found in repository");
+        return Ok(());
+    }
+
+    // Build skill items for this repository
+    #[derive(Debug, Clone)]
+    struct SkillItem {
+        name: String,
+        full_ref: String,
+        enabled: bool,
+    }
+
+    let config = lock.read_config()?;
+    let mut skills: Vec<SkillItem> = Vec::new();
+
+    for skill_name in skill_names {
+        let full_ref = format!("{}/{}", repo_id, skill_name);
+        let enabled = config.skills.get(&skill_name)
+            .map(|s| s.enabled)
+            .unwrap_or(false);
+
+        skills.push(SkillItem {
+            name: skill_name,
+            full_ref,
+            enabled,
+        });
+    }
+
+    // Sort skills by name
+    skills.sort_by(|a, b| a.name.cmp(&b.name));
+
+    // Build options for multi-select
+    let options: Vec<String> = skills
+        .iter()
+        .map(|s| s.name.clone())
+        .collect();
+
+    // Get indices of currently enabled skills
+    let default_indices: Vec<usize> = skills
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| s.enabled)
+        .map(|(i, _)| i)
+        .collect();
+
+    // Show multi-select prompt
+    let selected = inquire::MultiSelect::new("Select skills:", options.clone())
+        .with_default(&default_indices)
+        .with_help_message("↑↓ to move, Space to toggle, Enter to save, Esc to cancel")
+        .with_formatter(&|_| String::new())
+        .without_filtering()
+        .prompt();
+
+    let selected_names = match selected {
+        Ok(selections) => selections,
+        Err(_) => {
+            println!("Cancelled");
+            return Ok(());
+        }
+    };
+
+    // Determine what changed
+    let mut to_enable: Vec<String> = Vec::new();
+    let mut to_disable: Vec<String> = Vec::new();
+
+    for skill in &skills {
+        let should_be_enabled = selected_names.contains(&skill.name);
+
+        if should_be_enabled && !skill.enabled {
+            to_enable.push(skill.full_ref.clone());
+        } else if !should_be_enabled && skill.enabled {
+            to_disable.push(skill.name.clone());
+        }
+    }
+
+    // Apply changes
+    if !to_enable.is_empty() {
+        enable_with_lock(lock, &to_enable)?;
+    }
+
+    if !to_disable.is_empty() {
+        disable_with_lock(lock, &to_disable)?;
     }
 
     // Show summary

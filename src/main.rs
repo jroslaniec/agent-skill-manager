@@ -25,7 +25,7 @@ fn main() {
         Some(Command::Cache { action }) => match action {
             CacheAction::Dir => commands::cache::dir(),
         },
-        Some(Command::Add { skill_refs }) => commands::skill::add(&skill_refs),
+        Some(Command::Add { interactive, skill_refs }) => commands::skill::add(&skill_refs, interactive),
         // Shortcuts for skill commands
         Some(Command::Enable { skill_names_or_refs }) => commands::skill::enable(&skill_names_or_refs),
         Some(Command::Disable { skill_names_or_refs }) => commands::skill::disable(&skill_names_or_refs),
