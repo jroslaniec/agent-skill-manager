@@ -29,6 +29,34 @@ pub enum Command {
         #[command(subcommand)]
         action: CacheAction,
     },
+
+    /// Enable a skill (shortcut for 'skills enable')
+    Enable {
+        /// Skill name or reference (e.g., "git-commit" or "github.com/owner/repo/git-commit")
+        skill_name_or_ref: String,
+    },
+
+    /// Disable a skill (shortcut for 'skills disable')
+    Disable {
+        /// Skill name or reference (e.g., "git-commit" or "github.com/owner/repo/git-commit")
+        skill_name_or_ref: String,
+    },
+
+    /// List skills (shortcut for 'skills list')
+    #[command(visible_aliases = ["ls"])]
+    List {
+        /// Show all skills (enabled and disabled)
+        #[arg(short, long)]
+        all: bool,
+
+        /// Filter by status (enabled or disabled)
+        #[arg(long)]
+        status: Option<String>,
+
+        /// Show only skill names (one per line)
+        #[arg(long)]
+        name_only: bool,
+    },
 }
 
 #[derive(Debug, Subcommand)]

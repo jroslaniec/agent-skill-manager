@@ -21,6 +21,12 @@ fn main() {
         Command::Cache { action } => match action {
             CacheAction::Dir => commands::cache::dir(),
         },
+        // Shortcuts for skill commands
+        Command::Enable { skill_name_or_ref } => commands::skill::enable(&skill_name_or_ref),
+        Command::Disable { skill_name_or_ref } => commands::skill::disable(&skill_name_or_ref),
+        Command::List { all, status, name_only } => {
+            commands::skill::list(all, status.as_deref(), name_only)
+        }
     };
 
     if let Err(e) = result {
