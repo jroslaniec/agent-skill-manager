@@ -27,6 +27,7 @@ fn main() {
         Command::List { all, status, name_only } => {
             commands::skill::list(all, status.as_deref(), name_only)
         }
+        Command::Purge { force } => commands::purge::purge(force),
     };
 
     if let Err(e) = result {

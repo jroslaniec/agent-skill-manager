@@ -57,6 +57,13 @@ pub enum Command {
         #[arg(long)]
         name_only: bool,
     },
+
+    /// Purge all repositories and skills (full reset)
+    Purge {
+        /// Skip confirmation prompt
+        #[arg(short, long)]
+        force: bool,
+    },
 }
 
 #[derive(Debug, Subcommand)]
