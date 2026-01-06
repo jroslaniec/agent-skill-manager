@@ -25,7 +25,7 @@ cargo install --path .
 ### Add a Repository
 
 ```bash
-sm repo add github.com/jroslaniec/agent-skills
+sm repo add github.com/anthropics/skills/skills
 ```
 
 Repositories should contain skill directories, each with a `SKILL.md` file:
@@ -58,27 +58,30 @@ For this structure, use: `sm repo add github.com/owner/repo/tools/agent-skills`
 
 ```bash
 # Enable using full reference
-sm skill enable github.com/jroslaniec/agent-skills/git-commit
+sm skill enable github.com/anthropics/skills/skills/pdf
+sm enable github.com/anthropics/skills/skills/pdf
 
 # Or just the skill name if already registered
-sm skill enable git-commit
+sm skill enable pdf
+sm enable pdf
 
 # Disable (works with both name and full reference)
-sm skill disable git-commit
+sm skill disable pdf
+sm disable pdf
 ```
 
 ### Auxiliary Commands
 
 ```bash
 # List skills
-sm skills list
-sm skills list --all
+sm list
+sm list --all
 
 # List repositories
 sm repo list
 
 # Remove a repository and all its skills
-sm repo delete github.com/jroslaniec/agent-skills
+sm repo delete github.com/anthropics/skills/skills
 
 # Show cache directory location
 sm cache dir
@@ -90,3 +93,6 @@ The tool supports multiple aliases for convenience:
 
 - `repositories`, `repository`, `repos`, `repo` - Repository commands
 - `skills`, `skill`, `sk` - Skill commands
+- `list`, `ls` - Shortcut for `skills list`
+- `enable` - Shortcut for `skills enable`
+- `disable` - Shortcut for `skills disable`
