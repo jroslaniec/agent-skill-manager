@@ -30,16 +30,16 @@ pub enum Command {
         action: CacheAction,
     },
 
-    /// Enable a skill (shortcut for 'skills enable')
+    /// Enable one or more skills (shortcut for 'skills enable')
     Enable {
-        /// Skill name or reference (e.g., "git-commit" or "github.com/owner/repo/git-commit")
-        skill_name_or_ref: String,
+        /// Skill names or references (e.g., "git-commit" or "github.com/owner/repo/git-commit")
+        skill_names_or_refs: Vec<String>,
     },
 
-    /// Disable a skill (shortcut for 'skills disable')
+    /// Disable one or more skills (shortcut for 'skills disable')
     Disable {
-        /// Skill name or reference (e.g., "git-commit" or "github.com/owner/repo/git-commit")
-        skill_name_or_ref: String,
+        /// Skill names or references (e.g., "git-commit" or "github.com/owner/repo/git-commit")
+        skill_names_or_refs: Vec<String>,
     },
 
     /// List skills (shortcut for 'skills list')
@@ -117,16 +117,16 @@ pub enum RepoAction {
 
 #[derive(Debug, Subcommand)]
 pub enum SkillAction {
-    /// Enable a skill
+    /// Enable one or more skills
     Enable {
-        /// Skill name or reference (e.g., "git-commit" or "github.com/owner/repo/git-commit")
-        skill_name_or_ref: String,
+        /// Skill names or references (e.g., "git-commit" or "github.com/owner/repo/git-commit")
+        skill_names_or_refs: Vec<String>,
     },
 
-    /// Disable a skill
+    /// Disable one or more skills
     Disable {
-        /// Skill name or reference (e.g., "git-commit" or "github.com/owner/repo/git-commit")
-        skill_name_or_ref: String,
+        /// Skill names or references (e.g., "git-commit" or "github.com/owner/repo/git-commit")
+        skill_names_or_refs: Vec<String>,
     },
 
     /// List all skills

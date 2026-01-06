@@ -15,8 +15,8 @@ fn main() {
             RepoAction::Upgrade { url } => commands::repo::upgrade(&url),
         },
         Command::Skills { action } => match action {
-            SkillAction::Enable { skill_name_or_ref } => commands::skill::enable(&skill_name_or_ref),
-            SkillAction::Disable { skill_name_or_ref } => commands::skill::disable(&skill_name_or_ref),
+            SkillAction::Enable { skill_names_or_refs } => commands::skill::enable(&skill_names_or_refs),
+            SkillAction::Disable { skill_names_or_refs } => commands::skill::disable(&skill_names_or_refs),
             SkillAction::List { all, status, name_only } => {
                 commands::skill::list(all, status.as_deref(), name_only)
             }
@@ -25,8 +25,8 @@ fn main() {
             CacheAction::Dir => commands::cache::dir(),
         },
         // Shortcuts for skill commands
-        Command::Enable { skill_name_or_ref } => commands::skill::enable(&skill_name_or_ref),
-        Command::Disable { skill_name_or_ref } => commands::skill::disable(&skill_name_or_ref),
+        Command::Enable { skill_names_or_refs } => commands::skill::enable(&skill_names_or_refs),
+        Command::Disable { skill_names_or_refs } => commands::skill::disable(&skill_names_or_refs),
         Command::List { all, status, name_only } => {
             commands::skill::list(all, status.as_deref(), name_only)
         }
