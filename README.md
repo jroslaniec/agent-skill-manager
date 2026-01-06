@@ -29,7 +29,7 @@ sm repo add github.com/anthropics/skills/skills
 ```
 
 Repositories should contain skill directories, each with a `SKILL.md` file:
-```
+```txt
 repo-root/
 ├── skill-name-1/
 │   └── SKILL.md
@@ -43,7 +43,7 @@ sm repo add github.com/owner/repo/path/to/skills
 ```
 
 Example with nested structure:
-```
+```txt
 repo-root/
 ├── tools/
 │   └── agent-skills/
@@ -99,3 +99,9 @@ The tool supports multiple aliases for convenience:
 - `list`, `ls` - Shortcut for `skills list`
 - `enable` - Shortcut for `skills enable`
 - `disable` - Shortcut for `skills disable`
+
+## TODO
+
+- [ ] Add support for other coding agents (OpenCode, Codex, etc.)
+- [ ] Add Windows support
+- [ ] Add support for other repository platforms (GitLab, Bitbucket, etc.)
