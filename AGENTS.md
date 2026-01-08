@@ -45,6 +45,17 @@ Agent Skill Manager (`sm`) is a CLI tool for managing Claude Code skills. It clo
 - **Git cache**: `~/.cache/agent-skill-manager/git/{owner}/{repo}/`
 - **Claude skills**: `~/.claude/skills/` (symlinks)
 
+## Changelog & Releases
+
+**Changelog**: User-facing changes must be documented in `CHANGELOG.md` under the `## Unreleased` section. When a release happens, CI automatically renames this section to the version number and adds a fresh `## Unreleased` section.
+
+**Release process**: Add the `release` label to a PR. When merged, CI will:
+1. Bump the patch version in `Cargo.toml`
+2. Rename `## Unreleased` to `## Version X.Y.Z (date)` in `CHANGELOG.md`
+3. Commit, tag, and push → triggers cargo-dist release workflow
+
+**What to document**: Bug fixes, new features, breaking changes, and removed features that affect end users. Internal refactors don't need changelog entries.
+
 ## Limitations
 
 - GitHub only (no GitLab/Bitbucket)

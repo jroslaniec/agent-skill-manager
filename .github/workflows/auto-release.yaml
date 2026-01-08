@@ -1,0 +1,64 @@
+name: Auto Release
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  auto-release:
+    # Only run when PR is merged (not just closed) and has "release" label
+    if: github.event.pull_request.merged == true && contains(github.event.pull_request.labels.*.name, 'release')
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Use PAT to allow the pushed tag to trigger release workflow
+          # Default GITHUB_TOKEN doesn't trigger workflows to prevent loops
+          token: ${{ secrets.RELEASE_TOKEN }}
+          fetch-depth: 0
+
+      - name: Setup git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Install Rust
+        uses: dtolnay/rust-action@stable
+
+      - name: Install cargo-edit
+        run: cargo install cargo-edit --features vendored-openssl
+
+      - name: Bump patch version
+        id: bump
+        run: |
+          cargo set-version --bump patch
+          VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)"/\1/')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "date=$(date +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+          echo "Bumped to version $VERSION"
+
+      - name: Update changelog
+        run: |
+          VERSION="${{ steps.bump.outputs.version }}"
+          DATE="${{ steps.bump.outputs.date }}"
+
+          # Replace "## Unreleased" with the version header
+          sed -i "s/^## Unreleased$/## Version $VERSION ($DATE)/" CHANGELOG.md
+
+          # Add new Unreleased section after the main header
+          sed -i '/^# Changelog$/a\
+\
+## Unreleased\
+' CHANGELOG.md
+
+      - name: Commit release
+        run: |
+          git add Cargo.toml Cargo.lock CHANGELOG.md
+          git commit -m "Release ${{ steps.bump.outputs.version }}"
+
+      - name: Create and push tag
+        run: |
+          git tag "v${{ steps.bump.outputs.version }}"
+          git push origin main --follow-tags
