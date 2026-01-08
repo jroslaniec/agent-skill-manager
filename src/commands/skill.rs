@@ -226,8 +226,9 @@ pub fn add(skill_refs: &[String], interactive: bool) -> Result<()> {
     }
 
     // Check for updates on cached repositories
+    let config = lock.read_config()?;
     for (repo_id, is_pinned) in repos_to_check_updates {
-        if let Some(has_updates) = check_for_updates(&repo_id)? {
+        if let Some(has_updates) = check_for_updates(&repo_id, &config)? {
             if has_updates {
                 println!();
                 if is_pinned {
@@ -948,10 +949,7 @@ fn scan_for_skills(path: &Path) -> Result<Vec<String>> {
     Ok(skills)
 }
 
-fn check_for_updates(repo_id: &str) -> Result<Option<bool>> {
-    let lock = ConfigLock::acquire()?;
-    let config = lock.read_config()?;
-
+fn check_for_updates(repo_id: &str, config: &crate::config::state::Config) -> Result<Option<bool>> {
     let repo = match config.repositories.get(repo_id) {
         Some(r) => r,
         None => return Ok(None),

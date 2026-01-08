@@ -29,13 +29,9 @@ Agent Skill Manager (`sm`) is a CLI tool for managing Claude Code skills. It clo
 
 ### Key Patterns
 
-**Config locking**: All config modifications acquire `ConfigLock` first, ensuring atomic updates:
-```rust
-let mut lock = ConfigLock::acquire()?;
-let mut config = lock.load_config()?;
-// modify config
-lock.save_config(&config)?;
-```
+**Config locking**: All config modifications acquire `ConfigLock` first via `lock.update(|config| ...)`.
+
+**Avoiding deadlocks**: `flock()` locks per file descriptor—nested `ConfigLock::acquire()` calls deadlock. For batch operations, create `*_with_lock(&lock)` variants that accept an existing lock reference. Never call a public lock-acquiring function from within another.
 
 **Skill discovery**: `scan_for_skills()` finds directories containing `SKILL.md` files.
 
