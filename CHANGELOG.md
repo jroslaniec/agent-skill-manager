@@ -1,8 +1,10 @@
 # Changelog
 
+## Unreleased
+
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## Version 0.0.2 (2026-01-08)
 
 ### Fixed
 
