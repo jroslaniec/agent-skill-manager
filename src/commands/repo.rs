@@ -408,7 +408,11 @@ fn reconcile_skills(
 pub fn upgrade(url: &str) -> Result<()> {
     let repo_ref = RepoRef::parse(url)?;
     let lock = ConfigLock::acquire()?;
+    upgrade_with_lock(&repo_ref, &lock)
+}
 
+/// Internal upgrade logic that uses an existing lock
+fn upgrade_with_lock(repo_ref: &RepoRef, lock: &ConfigLock) -> Result<()> {
     // Check if repository exists
     let config = lock.read_config()?;
     if !config.has_repository(&repo_ref.repo_id()) {
@@ -604,7 +608,7 @@ pub fn upgrade_all(force: bool) -> Result<()> {
     let mut failed_count = 0;
 
     for (repo_id, _) in unpinned_repos {
-        match upgrade(repo_id) {
+        match RepoRef::parse(repo_id).and_then(|repo_ref| upgrade_with_lock(&repo_ref, &lock)) {
             Ok(_) => {
                 // Check if it was actually changed by looking at the output
                 // For now, just count as success

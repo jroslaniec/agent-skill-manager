@@ -2,7 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
-# Version 0.0.1 (2026-01-08)
+## Unreleased
+
+### Fixed
+
+- Fix deadlocks in `sm upgrade` and `sm add` commands when performing batch operations
+
+## Version 0.0.1 (2026-01-08)
 
 Initial release of `sm` (Agent Skill Manager) - a CLI for managing [Claude Code](https://claude.ai/code) skills from GitHub repositories.
 
