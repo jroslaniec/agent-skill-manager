@@ -25,7 +25,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Install Rust
-        uses: dtolnay/rust-action@stable
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Install cargo-edit
         run: cargo install cargo-edit --features vendored-openssl
@@ -47,11 +47,8 @@ jobs:
           # Replace "## Unreleased" with the version header
           sed -i "s/^## Unreleased$/## Version $VERSION ($DATE)/" CHANGELOG.md
 
-          # Add new Unreleased section after the main header
-          sed -i '/^# Changelog$/a\
-\
-## Unreleased\
-' CHANGELOG.md
+          # Add new Unreleased section after the main header using awk
+          awk '/^# Changelog$/{print; print ""; print "## Unreleased"; next}1' CHANGELOG.md > CHANGELOG.tmp && mv CHANGELOG.tmp CHANGELOG.md
 
       - name: Commit release
         run: |
