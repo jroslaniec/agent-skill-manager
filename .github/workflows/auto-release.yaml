@@ -27,17 +27,26 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install cargo-edit
-        run: cargo install cargo-edit
-
       - name: Bump patch version
         id: bump
         run: |
-          cargo set-version --bump patch
-          VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)"/\1/')
+          # Extract current version and bump patch
+          CURRENT=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)"/\1/')
+          MAJOR=$(echo $CURRENT | cut -d. -f1)
+          MINOR=$(echo $CURRENT | cut -d. -f2)
+          PATCH=$(echo $CURRENT | cut -d. -f3)
+          NEW_PATCH=$((PATCH + 1))
+          VERSION="$MAJOR.$MINOR.$NEW_PATCH"
+
+          # Update Cargo.toml
+          sed -i "s/^version = \"$CURRENT\"/version = \"$VERSION\"/" Cargo.toml
+
+          # Update Cargo.lock
+          cargo update --workspace
+
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "date=$(date +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
-          echo "Bumped to version $VERSION"
+          echo "Bumped $CURRENT -> $VERSION"
 
       - name: Update changelog
         run: |
@@ -58,4 +67,5 @@ jobs:
       - name: Create and push tag
         run: |
           git tag "v${{ steps.bump.outputs.version }}"
-          git push origin main --follow-tags
+          git push origin main
+          git push origin "v${{ steps.bump.outputs.version }}"
