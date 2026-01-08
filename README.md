@@ -14,6 +14,12 @@ The tool clones repositories containing skills to a local cache directory. When 
 
 ## Installation
 
+### Installer Script (macOS and Linux)
+
+```bash
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/jroslaniec/agent-skill-manager/releases/latest/download/agent-skill-manager-installer.sh | sh
+```
+
 ### From Source
 
 ```bash
