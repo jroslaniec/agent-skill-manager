@@ -1,7 +1,8 @@
 [package]
 name = "agent-skill-manager"
-version = "0.1.0"
+version = "0.0.1"
 edition = "2024"
+repository = "https://github.com/jroslaniec/agent-skill-manager"
 
 [[bin]]
 name = "sm"
@@ -19,3 +20,8 @@ console = "0.15"
 tempfile = "3.0"
 chrono = "0.4"
 inquire = "0.9.1"
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
