@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## Version 0.0.3 (2026-01-16)
+
 - **Multi-integration support** - Skills can now be enabled for multiple coding agents simultaneously
   - `sm integrations add claude-code` - Register an integration with default path
   - `sm integrations add opencode` - Built-in support for OpenCode (~/.config/opencode/skill)
