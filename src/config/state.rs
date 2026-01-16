@@ -8,6 +8,8 @@ pub struct Config {
     pub repositories: HashMap<String, Repository>,
     #[serde(default)]
     pub skills: HashMap<String, Skill>,
+    #[serde(default)]
+    pub integrations: HashMap<String, Integration>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -31,6 +33,13 @@ pub struct Skill {
     pub enabled_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub disabled_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Integration {
+    pub skills_dir: String,  // Path to skills directory (e.g., "~/.claude/skills")
+    #[serde(default = "chrono_now")]
+    pub enabled_at: String,
 }
 
 fn chrono_now() -> String {
@@ -134,5 +143,34 @@ impl Config {
     /// Remove a skill
     pub fn remove_skill(&mut self, skill_name: &str) -> Option<Skill> {
         self.skills.remove(skill_name)
+    }
+
+    /// Check if an integration exists
+    pub fn has_integration(&self, name: &str) -> bool {
+        self.integrations.contains_key(name)
+    }
+
+    /// Add an integration
+    pub fn add_integration(&mut self, name: String, skills_dir: String) {
+        self.integrations.insert(
+            name,
+            Integration {
+                skills_dir,
+                enabled_at: chrono_now(),
+            },
+        );
+    }
+
+    /// Remove an integration
+    pub fn remove_integration(&mut self, name: &str) -> Option<Integration> {
+        self.integrations.remove(name)
+    }
+
+    /// Get all enabled skills
+    pub fn enabled_skills(&self) -> Vec<(&String, &Skill)> {
+        self.skills
+            .iter()
+            .filter(|(_, skill)| skill.enabled)
+            .collect()
     }
 }

@@ -2,15 +2,16 @@
 
 A CLI tool for managing [Agent Skills](https://agentskills.io).
 
+**Supported Coding Agents**: Claude Code, OpenCode, Codex, Gemini CLI (+ custom integrations)
+
 **Current Limitations**:
 
 - Only GitHub repositories are supported
-- Only Claude Code is supported
 - Windows is not supported (uses Unix symlinks)
 
 ## How it works
 
-The tool clones repositories containing skills to a local cache directory. When you enable a skill, it creates a symlink from `~/.claude/skills/<skill-name>` to the cached repository location. Disabling a skill removes the symlink while keeping the repository cached for fast re-enabling.
+The tool clones repositories containing skills to a local cache directory. When you enable a skill, it creates symlinks in all your registered coding agents' skill directories. Disabling a skill removes the symlinks while keeping the repository cached for fast re-enabling.
 
 ## Installation
 
@@ -24,6 +25,25 @@ curl --proto '=https' --tlsv1.2 -LsSf https://github.com/jroslaniec/agent-skill-
 
 ```bash
 cargo install --path .
+```
+
+## Quick Start
+
+After installation, configure which coding agents you use:
+
+```bash
+# Interactive setup - select your coding agents
+sm configure
+
+# Or add individually
+sm integrations add claude-code
+sm integrations add opencode
+```
+
+Then add skills:
+
+```bash
+sm add github.com/anthropics/skills/skills/pdf
 ```
 
 ## Usage
@@ -155,18 +175,45 @@ sm cache dir
 sm purge
 ```
 
+### Manage Integrations
+
+Configure which coding agents receive your skills:
+
+```bash
+# Interactive setup
+sm configure
+
+# Add built-in integrations
+sm integrations add claude-code    # ~/.claude/skills/
+sm integrations add opencode       # ~/.config/opencode/skill/
+sm integrations add codex          # ~/.codex/skills/
+sm integrations add gemini-cli     # ~/.gemini/skills/
+
+# Add custom integration
+sm integrations add cursor --path ~/.cursor/skills
+
+# List integrations (shows all presets + custom)
+sm integrations list
+
+# Remove an integration
+sm integrations remove cursor
+```
+
+Aliases are supported: `claude` → `claude-code`, `gemini` → `gemini-cli`
+
 ## Command Aliases
 
 The tool supports multiple aliases for convenience:
 
 - `repositories`, `repository`, `repos`, `repo` - Repository commands
 - `skills`, `skill`, `sk` - Skill commands
+- `integrations`, `integration`, `int` - Integration commands
 - `list`, `ls` - Shortcut for `skills list`
 - `enable` - Shortcut for `skills enable`
 - `disable` - Shortcut for `skills disable`
+- `configure`, `config` - Configure integrations
 
 ## TODO
 
-- [ ] Add support for other coding agents (OpenCode, Codex, etc.)
 - [ ] Add Windows support
 - [ ] Add support for other repository platforms (GitLab, Bitbucket, etc.)

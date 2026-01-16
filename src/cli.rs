@@ -82,6 +82,17 @@ pub enum Command {
         #[arg(short, long)]
         force: bool,
     },
+
+    /// Manage integrations (coding agents like Claude Code, OpenCode)
+    #[command(visible_aliases = ["int", "integration"])]
+    Integrations {
+        #[command(subcommand)]
+        action: IntegrationAction,
+    },
+
+    /// Interactive setup - choose which integrations to enable
+    #[command(visible_alias = "config")]
+    Configure,
 }
 
 #[derive(Debug, Subcommand)]
@@ -161,4 +172,29 @@ pub enum SkillAction {
 pub enum CacheAction {
     /// Show cache directory path
     Dir,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum IntegrationAction {
+    /// Add/enable an integration
+    #[command(visible_alias = "enable")]
+    Add {
+        /// Integration name (e.g., "claude-code", "opencode")
+        name: String,
+
+        /// Custom skills directory path (required for unknown integrations)
+        #[arg(long)]
+        path: Option<String>,
+    },
+
+    /// Remove/disable an integration
+    #[command(visible_aliases = ["rm", "delete", "disable"])]
+    Remove {
+        /// Integration name to remove
+        name: String,
+    },
+
+    /// List all registered integrations
+    #[command(visible_aliases = ["ls"])]
+    List,
 }

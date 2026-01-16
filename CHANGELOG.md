@@ -2,7 +2,17 @@
 
 ## Unreleased
 
-All notable changes to this project will be documented in this file.
+- **Multi-integration support** - Skills can now be enabled for multiple coding agents simultaneously
+  - `sm integrations add claude-code` - Register an integration with default path
+  - `sm integrations add opencode` - Built-in support for OpenCode (~/.config/opencode/skill)
+  - `sm integrations add codex` - Built-in support for OpenAI Codex CLI (~/.codex/skills)
+  - `sm integrations add gemini-cli` - Built-in support for Gemini CLI (~/.gemini/skills)
+  - `sm integrations add <name> --path <dir>` - Add custom integration with any path
+  - `sm integrations remove <name>` - Remove an integration
+  - `sm integrations list` - List all integrations (always shows built-in presets)
+  - `sm configure` / `sm config` - Interactive setup to select integrations
+  - `sm int` - Shorthand alias for integrations commands
+- Name aliases for integrations (e.g., claude/claudecode → claude-code, gemini → gemini-cli)
 
 ## Version 0.0.2 (2026-01-08)
 

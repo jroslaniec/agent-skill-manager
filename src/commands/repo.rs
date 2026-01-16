@@ -1,8 +1,9 @@
 use anyhow::{bail, Context, Result};
 use console::style;
 use std::io::{self, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
+use crate::commands::skill::remove_skill_symlinks_from_all_integrations;
 use crate::config::ConfigLock;
 use crate::git;
 use crate::paths;
@@ -176,17 +177,15 @@ pub fn delete(url: &str, force: bool) -> Result<()> {
         .flatten()
         .collect();
 
+    // Remove symlinks from all integrations
+    for skill_name in &skill_names {
+        remove_skill_symlinks_from_all_integrations(skill_name, &config);
+    }
+
     lock.update(|config| {
         // Remove all skills
         for skill_name in &skill_names {
             config.remove_skill(skill_name);
-
-            // Remove symlink if it exists
-            let skill_link_path = paths::claude_skills_dir()?.join(skill_name);
-            if skill_link_path.exists() {
-                std::fs::remove_file(&skill_link_path)
-                    .context("Failed to remove skill symlink")?;
-            }
         }
 
         // Remove repository
@@ -370,10 +369,13 @@ fn reconcile_skills(
             // Skill was deleted from repository
             removed_skills.push(skill_name.clone());
 
-            // Remove symlink if it exists
-            let skill_link_path = paths::claude_skills_dir()?.join(skill_name);
-            if skill_link_path.exists() || skill_link_path.symlink_metadata().is_ok() {
-                std::fs::remove_file(&skill_link_path).ok();
+            // Remove symlinks from all integrations
+            for (_int_name, integration) in &config.integrations {
+                let skills_dir = PathBuf::from(&integration.skills_dir);
+                let link_path = skills_dir.join(skill_name);
+                if link_path.exists() || link_path.symlink_metadata().is_ok() {
+                    std::fs::remove_file(&link_path).ok();
+                }
             }
 
             // Remove from config entirely

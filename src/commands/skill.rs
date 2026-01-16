@@ -5,6 +5,7 @@ use std::io::IsTerminal;
 use std::os::unix::fs as unix_fs;
 use std::path::{Path, PathBuf};
 
+use crate::config::state::Config;
 use crate::config::ConfigLock;
 use crate::git;
 use crate::paths;
@@ -185,11 +186,9 @@ pub fn add(skill_refs: &[String], interactive: bool) -> Result<()> {
                 // Skill exists but disabled - enable it
                 lock.update(|config| config.enable_skill(&skill.skill_name))?;
 
-                // Create symlink if needed
-                let skill_link_path = paths::claude_skills_dir()?.join(&skill.skill_name);
-                if !skill_link_path.exists() {
-                    create_skill_symlink(&source_path, &skill_link_path)?;
-                }
+                // Create symlinks in all integrations
+                let config = lock.read_config()?;
+                create_skill_symlinks_for_all_integrations(&source_path, &skill.skill_name, &config)?;
 
                 println!("Enabled {}", style(&skill.skill_name).cyan());
             } else {
@@ -203,17 +202,11 @@ pub fn add(skill_refs: &[String], interactive: bool) -> Result<()> {
                     continue;
                 }
 
-                // Register and enable the skill
-                let claude_skills_dir = paths::claude_skills_dir()?;
-                if !claude_skills_dir.exists() {
-                    bail!(
-                        "Claude skills directory not found at {}.\nPlease ensure Claude Code is installed and the ~/.claude directory exists.",
-                        claude_skills_dir.display()
-                    );
-                }
+                // Check that integrations are configured
+                require_integrations(&config)?;
 
-                let skill_link_path = claude_skills_dir.join(&skill.skill_name);
-                create_skill_symlink(&source_path, &skill_link_path)?;
+                // Create symlinks in all integrations
+                create_skill_symlinks_for_all_integrations(&source_path, &skill.skill_name, &config)?;
 
                 lock.update(|config| {
                     config.add_skill(skill.skill_name.clone(), repo_id.clone(), skill.path.clone());
@@ -276,19 +269,16 @@ fn enable_with_lock(lock: &ConfigLock, skill_names_or_refs: &[String]) -> Result
 
             lock.update(|config| config.enable_skill(skill_name_or_ref))?;
 
-            // Create symlink if it doesn't exist
-            let skill_link_path = paths::claude_skills_dir()?.join(skill_name_or_ref);
-            if !skill_link_path.exists() {
-                // We need to get the source path from the config
-                let skill_info = config.skills.get(skill_name_or_ref).unwrap();
+            // Create symlinks in all integrations
+            let config = lock.read_config()?;
+            let skill_info = config.skills.get(skill_name_or_ref).unwrap();
 
-                // Parse repository reference to get cache path
-                let repo_ref = RepoRef::parse(&skill_info.repository)?;
-                let git_cache = paths::git_cache_dir()?;
-                let repo_cache_path = git_cache.join(&repo_ref.owner).join(&repo_ref.repo);
-                let source_path = repo_cache_path.join(&skill_info.skill_path);
-                create_skill_symlink(&source_path, &skill_link_path)?;
-            }
+            // Parse repository reference to get cache path
+            let repo_ref = RepoRef::parse(&skill_info.repository)?;
+            let git_cache = paths::git_cache_dir()?;
+            let repo_cache_path = git_cache.join(&repo_ref.owner).join(&repo_ref.repo);
+            let source_path = repo_cache_path.join(&skill_info.skill_path);
+            create_skill_symlinks_for_all_integrations(&source_path, skill_name_or_ref, &config)?;
 
             println!(
                 "Enabled skill {}",
@@ -312,12 +302,10 @@ fn enable_with_lock(lock: &ConfigLock, skill_names_or_refs: &[String]) -> Result
                 // Re-enable the skill
                 lock.update(|config| config.enable_skill(&skill.skill_name))?;
 
-                // Create symlink if it doesn't exist
-                let skill_link_path = paths::claude_skills_dir()?.join(&skill.skill_name);
-                if !skill_link_path.exists() {
-                    let source_path = get_skill_source_path(&skill)?;
-                    create_skill_symlink(&source_path, &skill_link_path)?;
-                }
+                // Create symlinks in all integrations
+                let config = lock.read_config()?;
+                let source_path = get_skill_source_path(&skill)?;
+                create_skill_symlinks_for_all_integrations(&source_path, &skill.skill_name, &config)?;
 
                 println!(
                     "Enabled skill {}",
@@ -382,17 +370,11 @@ fn enable_with_lock(lock: &ConfigLock, skill_names_or_refs: &[String]) -> Result
             );
         }
 
-        // Create symlink to Claude skills directory
-        let claude_skills_dir = paths::claude_skills_dir()?;
-        if !claude_skills_dir.exists() {
-            bail!(
-                "Claude skills directory not found at {}.\nPlease ensure Claude Code is installed and the ~/.claude directory exists.",
-                claude_skills_dir.display()
-            );
-        }
+        // Check that integrations are configured
+        require_integrations(&config)?;
 
-        let skill_link_path = claude_skills_dir.join(&skill.skill_name);
-        create_skill_symlink(&source_path, &skill_link_path)?;
+        // Create symlinks in all integrations
+        create_skill_symlinks_for_all_integrations(&source_path, &skill.skill_name, &config)?;
 
         // Add skill to config
         lock.update(|config| {
@@ -443,12 +425,8 @@ fn disable_with_lock(lock: &ConfigLock, skill_names_or_refs: &[String]) -> Resul
             continue;
         }
 
-        // Remove symlink
-        let skill_link_path = paths::claude_skills_dir()?.join(&skill_name);
-        if skill_link_path.exists() {
-            std::fs::remove_file(&skill_link_path)
-                .context("Failed to remove skill symlink")?;
-        }
+        // Remove symlinks from all integrations
+        remove_skill_symlinks_from_all_integrations(&skill_name, &config);
 
         // Update config
         lock.update(|config| config.disable_skill(&skill_name))?;
@@ -900,7 +878,7 @@ fn get_skill_source_path(skill: &SkillRef) -> Result<PathBuf> {
     Ok(repo_cache_path.join(&skill.path))
 }
 
-fn create_skill_symlink(source: &PathBuf, link: &PathBuf) -> Result<()> {
+pub fn create_skill_symlink(source: &PathBuf, link: &PathBuf) -> Result<()> {
     if link.exists() {
         // Remove existing symlink/file
         if link.is_symlink() {
@@ -916,6 +894,91 @@ fn create_skill_symlink(source: &PathBuf, link: &PathBuf) -> Result<()> {
     unix_fs::symlink(source, link)
         .context("Failed to create symlink")?;
 
+    Ok(())
+}
+
+/// Create symlinks for a skill in all registered integrations
+/// Returns true if at least one symlink was created successfully
+fn create_skill_symlinks_for_all_integrations(
+    source: &PathBuf,
+    skill_name: &str,
+    config: &Config,
+) -> Result<bool> {
+    if config.integrations.is_empty() {
+        bail!(
+            "No integrations configured.\n\
+             Run {} to set up integrations, or add one manually:\n  \
+             sm integrations add claude-code",
+            style("sm configure").cyan()
+        );
+    }
+
+    let mut success_count = 0;
+    let mut errors: Vec<(String, String)> = Vec::new();
+
+    for (name, integration) in &config.integrations {
+        let skills_dir = PathBuf::from(&integration.skills_dir);
+
+        // Create directory if it doesn't exist
+        if !skills_dir.exists() {
+            if let Err(e) = std::fs::create_dir_all(&skills_dir) {
+                errors.push((name.clone(), format!("Failed to create directory: {}", e)));
+                continue;
+            }
+        }
+
+        let link_path = skills_dir.join(skill_name);
+        match create_skill_symlink(source, &link_path) {
+            Ok(_) => success_count += 1,
+            Err(e) => errors.push((name.clone(), e.to_string())),
+        }
+    }
+
+    // Report any errors
+    for (name, error) in &errors {
+        eprintln!(
+            "  {} {}: {}",
+            style("!").yellow(),
+            name,
+            error
+        );
+    }
+
+    Ok(success_count > 0)
+}
+
+/// Remove symlinks for a skill from all registered integrations
+pub fn remove_skill_symlinks_from_all_integrations(
+    skill_name: &str,
+    config: &Config,
+) {
+    for (name, integration) in &config.integrations {
+        let skills_dir = PathBuf::from(&integration.skills_dir);
+        let link_path = skills_dir.join(skill_name);
+
+        if link_path.is_symlink() {
+            if let Err(e) = std::fs::remove_file(&link_path) {
+                eprintln!(
+                    "  {} {}: Failed to remove symlink: {}",
+                    style("!").yellow(),
+                    name,
+                    e
+                );
+            }
+        }
+    }
+}
+
+/// Check that at least one integration is configured
+fn require_integrations(config: &Config) -> Result<()> {
+    if config.integrations.is_empty() {
+        bail!(
+            "No integrations configured.\n\
+             Run {} to set up integrations, or add one manually:\n  \
+             sm integrations add claude-code",
+            style("sm configure").cyan()
+        );
+    }
     Ok(())
 }
 
