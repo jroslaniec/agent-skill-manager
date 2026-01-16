@@ -1,4 +1,4 @@
-use agent_skill_manager::cli::{Args, CacheAction, Command, RepoAction, SkillAction};
+use agent_skill_manager::cli::{Args, CacheAction, Command, IntegrationAction, RepoAction, SkillAction};
 use agent_skill_manager::commands;
 use clap::Parser;
 
@@ -34,6 +34,14 @@ fn main() {
         }
         Some(Command::Purge { force }) => commands::purge::purge(force),
         Some(Command::Upgrade { force }) => commands::repo::upgrade_all(force),
+        Some(Command::Integrations { action }) => match action {
+            IntegrationAction::Add { name, path } => {
+                commands::integration::add(&name, path.as_deref())
+            }
+            IntegrationAction::Remove { name } => commands::integration::remove(&name),
+            IntegrationAction::List => commands::integration::list(),
+        },
+        Some(Command::Configure) => commands::integration::configure(),
     };
 
     if let Err(e) = result {

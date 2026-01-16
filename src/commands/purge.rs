@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use console::style;
 use std::io::{self, Write};
+use std::path::PathBuf;
 
 use crate::config::{Config, ConfigLock};
 use crate::paths;
@@ -39,12 +40,14 @@ pub fn purge(force: bool) -> Result<()> {
     let repo_count = config.repositories.len();
     let skill_count = config.skills.len();
 
-    // 1. Remove all skill symlinks
+    // 1. Remove all skill symlinks from all integrations
     for skill_name in config.skills.keys() {
-        let skill_link_path = paths::claude_skills_dir()?.join(skill_name);
-        if skill_link_path.exists() {
-            std::fs::remove_file(&skill_link_path)
-                .context("Failed to remove skill symlink")?;
+        for (_int_name, integration) in &config.integrations {
+            let skills_dir = PathBuf::from(&integration.skills_dir);
+            let link_path = skills_dir.join(skill_name);
+            if link_path.exists() {
+                std::fs::remove_file(&link_path).ok();
+            }
         }
     }
 
