@@ -8,7 +8,7 @@ use crate::paths;
 use crate::skill_ref::RepoRef;
 
 /// Add a new integration
-pub fn add(name: &str, custom_path: Option<&str>) -> Result<()> {
+pub fn add(name: &str, custom_path: Option<&str>, custom_agents_path: Option<&str>) -> Result<()> {
     let lock = ConfigLock::acquire()?;
 
     let normalized_name = paths::normalize_integration_name(name);
@@ -24,16 +24,25 @@ pub fn add(name: &str, custom_path: Option<&str>) -> Result<()> {
     }
 
     // Determine skills and agents directories
-    let (skills_dir, agents_dir) = match custom_path {
-        Some(path) => {
-            // Custom path only sets skills_dir, agents_dir would need separate flag
+    let (skills_dir, agents_dir) = match (custom_path, custom_agents_path) {
+        (Some(path), Some(agents_path)) => {
+            // Both custom paths provided
+            (Some(paths::expand_tilde(path)?), Some(paths::expand_tilde(agents_path)?))
+        }
+        (Some(path), None) => {
+            // Only skills path provided - for custom integrations
             (Some(paths::expand_tilde(path)?), None)
         }
-        None => {
+        (None, Some(agents_path)) => {
+            // Only agents path provided - for custom integrations
+            (None, Some(paths::expand_tilde(agents_path)?))
+        }
+        (None, None) => {
+            // No custom paths - use built-in defaults
             match (paths::get_builtin_skills_dir(&normalized_name), paths::get_builtin_agents_dir(&normalized_name)) {
                 (None, None) => {
                     bail!(
-                        "Unknown integration '{}'. Use --path to specify the skills directory.\n\
+                        "Unknown integration '{}'. Use --path and/or --agents-path to specify directories.\n\
                          Known integrations: {}",
                         name,
                         paths::builtin_integrations()
@@ -357,7 +366,7 @@ pub fn configure() -> Result<()> {
 
     // Apply changes
     for name in to_add {
-        add(name, None)?;
+        add(name, None, None)?;
     }
 
     for name in to_remove {

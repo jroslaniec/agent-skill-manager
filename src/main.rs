@@ -39,8 +39,8 @@ fn main() {
         Some(Command::Purge { force }) => commands::purge::purge(force),
         Some(Command::Upgrade { force }) => commands::repo::upgrade_all(force),
         Some(Command::Integrations { action }) => match action {
-            IntegrationAction::Add { name, path } => {
-                commands::integration::add(&name, path.as_deref())
+            IntegrationAction::Add { name, path, agents_path } => {
+                commands::integration::add(&name, path.as_deref(), agents_path.as_deref())
             }
             IntegrationAction::Remove { name } => commands::integration::remove(&name),
             IntegrationAction::List => commands::integration::list(),

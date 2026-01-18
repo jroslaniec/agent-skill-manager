@@ -219,6 +219,10 @@ pub enum IntegrationAction {
         /// Custom skills directory path (required for unknown integrations)
         #[arg(long)]
         path: Option<String>,
+
+        /// Custom agents directory path (for custom integrations)
+        #[arg(long)]
+        agents_path: Option<String>,
     },
 
     /// Remove/disable an integration
