@@ -407,8 +407,8 @@
         "cargo test passes"
       ],
       "priority": 27,
-      "passes": false,
-      "notes": "BUG: Severity low. Repro: Have skills and agents enabled, run 'sm list --skills --agents' - shows 'No enabled skills found' instead of both. Root cause: In list_combined() logic: 'if !agents_only { add skills }' and 'if !skills_only { add agents }'. When both true, both conditions fail. Affected: src/commands/skill.rs"
+      "passes": true,
+      "notes": "Fixed in commit 679b4ec - modified list_combined() to compute show_skills and show_agents flags that account for when both --skills and --agents are set (treats as 'show both'). 92 tests pass."
     }
   ]
 }

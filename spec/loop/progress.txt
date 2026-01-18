@@ -150,3 +150,22 @@
   - Output formatting: when adding new columns, remember to adjust both header and separator line lengths
 
 ---
+
+## 2026-01-18 - US-027: Fix sm list --skills --agents showing no results
+
+- What was implemented:
+  - Fixed list_combined() in skill.rs to handle combined --skills --agents flags
+  - Added show_skills and show_agents boolean flags that account for both flags being set
+  - When both flags are set, the function now shows both skills and agents (same as no filter)
+  - The fix: `let show_skills = !agents_only || (skills_only && agents_only);`
+
+- Files changed:
+  - src/commands/skill.rs - Modified list_combined() logic for flag handling
+
+- **Learnings for future iterations:**
+  - When multiple exclusive filters are provided together, decide the expected behavior: show error or show both
+  - Current decision: show both (same as no filter specified)
+  - Boolean flag logic: use intermediate computed flags to avoid complex nested conditions
+  - Test edge cases like combined flags when implementing filters
+
+---
