@@ -6,7 +6,26 @@
 - Local paths use `local:` prefix in repo_id, remote use `host/path` format
 - Unit tests must use placeholder data: testowner, testteam, testrepo, test-skills, example.com, etc. (no real usernames)
 - Git module: error messages must include repository path/URL and git's stderr (NFR-002)
+- Agent struct mirrors Skill struct: same fields (repository, *_path, enabled, enabled_at, disabled_at) and helper methods
 
+---
+
+## 2026-01-18 - US-005
+- Added Agent data model to config/state.rs
+- Files changed:
+  - `src/config/state.rs` - Added Agent struct, agents HashMap to Config, helper methods, unit tests
+- **Changes made:**
+  - Agent struct: repository, agent_path, enabled, enabled_at, disabled_at (mirrors Skill struct)
+  - Config.agents: HashMap<String, Agent>
+  - Helper methods: add_agent, enable_agent, disable_agent, remove_agent, has_agent
+  - Query methods: agents_for_repo, enabled_agents
+  - 8 new unit tests for Agent operations and TOML serialization
+  - 57 total tests pass
+- **Learnings for future iterations:**
+  - Agent struct mirrors Skill struct pattern - use same fields and method patterns
+  - Config helper methods follow consistent naming: add_*, enable_*, disable_*, remove_*, has_*, *_for_repo
+  - Backward compatibility: use `#[serde(default)]` for new HashMap fields
+  - Unit tests use placeholder domains: example.com/testowner/testrepo
 ---
 
 ## 2026-01-18 - US-004
