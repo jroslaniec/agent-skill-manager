@@ -256,6 +256,3 @@ The tool supports multiple aliases for convenience:
 - `disable` - Shortcut for `skills disable`
 - `configure`, `config` - Configure integrations
 
-## TODO
-
-- [ ] Add Windows support
