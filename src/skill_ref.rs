@@ -166,6 +166,8 @@ impl RepoRef {
         || reference == ".."
         // File URL
         || reference.starts_with("file://")
+        // Local repo_id format (e.g., "local:/Users/dev/skills")
+        || reference.starts_with("local:")
     }
 
     /// Parse an SSH URL (git@host:owner/repo.git or git@host:owner/repo.git/path)
@@ -221,9 +223,10 @@ impl RepoRef {
         // Split on @ to extract SHA/tag if present
         let (reference, sha) = Self::extract_sha_suffix(reference)?;
 
-        // Handle file:// URLs
+        // Handle file:// URLs and local: prefix (from repo_id)
         let path_str = reference
             .strip_prefix("file://")
+            .or_else(|| reference.strip_prefix("local:"))
             .unwrap_or(reference);
 
         // Expand ~ to home directory
@@ -724,10 +727,20 @@ mod tests {
         assert!(RepoRef::looks_like_local_path("./relative"));
         assert!(RepoRef::looks_like_local_path("../parent"));
         assert!(RepoRef::looks_like_local_path("file:///path"));
+        assert!(RepoRef::looks_like_local_path("local:/Users/dev/skills"));
 
         assert!(!RepoRef::looks_like_local_path("github.com/testowner/testrepo"));
         assert!(!RepoRef::looks_like_local_path("https://github.com/testowner/testrepo"));
         assert!(!RepoRef::looks_like_local_path("git@github.com:testowner/testrepo.git"));
+    }
+
+    #[test]
+    fn test_parse_local_repo_id_format() {
+        // Test parsing repo_id format used for local repos in config
+        let repo = RepoRef::parse("local:/Users/dev/my-skills").unwrap();
+        assert_eq!(repo.source_type, GitSourceType::Local);
+        assert_eq!(repo.git_url, "/Users/dev/my-skills");
+        assert_eq!(repo.repo_id, "local:/Users/dev/my-skills");
     }
 
     #[test]
