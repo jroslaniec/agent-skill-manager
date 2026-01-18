@@ -100,10 +100,10 @@ pub enum Command {
 
 #[derive(Debug, Subcommand)]
 pub enum RepoAction {
-    /// Add a repository
+    /// Add one or more repositories
     Add {
-        /// Repository URL (e.g., github.com/owner/repo, gitlab.com/owner/repo, or /local/path)
-        url: String,
+        /// Repository URLs (e.g., github.com/owner/repo, gitlab.com/owner/repo, or /local/path)
+        urls: Vec<String>,
     },
 
     /// Delete a repository

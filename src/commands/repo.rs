@@ -9,9 +9,40 @@ use crate::git;
 use crate::paths;
 use crate::skill_ref::RepoRef;
 
-pub fn add(url: &str) -> Result<()> {
-    let repo_ref = RepoRef::parse(url)?;
+pub fn add(urls: &[String]) -> Result<()> {
+    if urls.is_empty() {
+        bail!("At least one repository URL is required");
+    }
+
     let lock = ConfigLock::acquire()?;
+    let mut had_errors = false;
+    let mut success_count = 0;
+
+    for url in urls {
+        if let Err(e) = add_single(&lock, url) {
+            eprintln!("Error adding {}: {}", url, e);
+            had_errors = true;
+        } else {
+            success_count += 1;
+        }
+    }
+
+    // Show summary
+    if urls.len() > 1 {
+        if had_errors {
+            eprintln!("Added {}/{} repositories", success_count, urls.len());
+        }
+    }
+
+    if had_errors {
+        std::process::exit(1);
+    }
+
+    Ok(())
+}
+
+fn add_single(lock: &ConfigLock, url: &str) -> Result<()> {
+    let repo_ref = RepoRef::parse(url)?;
 
     // Check if repository already exists
     let config = lock.read_config()?;

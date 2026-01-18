@@ -8,7 +8,7 @@ fn main() {
     let result = match args.command {
         None => commands::skill::manage(),
         Some(Command::Repositories { action }) => match action {
-            RepoAction::Add { url } => commands::repo::add(&url),
+            RepoAction::Add { urls } => commands::repo::add(&urls),
             RepoAction::Delete { url, force } => commands::repo::delete(&url, force),
             RepoAction::List => commands::repo::list(),
             RepoAction::Pin { url } => commands::repo::pin(&url),
