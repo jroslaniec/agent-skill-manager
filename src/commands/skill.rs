@@ -609,8 +609,12 @@ pub fn list_combined(all: bool, status: Option<&str>, name_only: bool, skills_on
 
     let mut items: Vec<Item> = Vec::new();
 
-    // Add skills (unless --agents flag is set)
-    if !agents_only {
+    // Determine what to show: if both flags are set, show both (like no flags)
+    let show_skills = !agents_only || (skills_only && agents_only);
+    let show_agents = !skills_only || (skills_only && agents_only);
+
+    // Add skills (unless --agents flag is set, unless both flags are set)
+    if show_skills {
         for (name, skill) in &config.skills {
             items.push(Item {
                 item_type: ItemType::Skill,
@@ -621,8 +625,8 @@ pub fn list_combined(all: bool, status: Option<&str>, name_only: bool, skills_on
         }
     }
 
-    // Add agents (unless --skills flag is set)
-    if !skills_only {
+    // Add agents (unless --skills flag is set, unless both flags are set)
+    if show_agents {
         for (name, agent) in &config.agents {
             items.push(Item {
                 item_type: ItemType::Agent,
