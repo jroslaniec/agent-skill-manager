@@ -37,7 +37,7 @@ fn main() {
         Some(Command::Enable { skill_names_or_refs }) => commands::skill::enable(&skill_names_or_refs),
         Some(Command::Disable { skill_names_or_refs }) => commands::skill::disable(&skill_names_or_refs),
         Some(Command::List { all, status, name_only }) => {
-            commands::skill::list(all, status.as_deref(), name_only)
+            commands::skill::list_combined(all, status.as_deref(), name_only)
         }
         Some(Command::Purge { force }) => commands::purge::purge(force),
         Some(Command::Upgrade { force }) => commands::repo::upgrade_all(force),

@@ -18,6 +18,46 @@
 
 ---
 
+## 2026-01-18 - US-012
+- Implemented sm list to show both skills and agents with type prefixes
+- Files changed:
+  - `src/commands/skill.rs` - Added `list_combined()` function for unified listing
+  - `src/main.rs` - Updated `Command::List` to call `list_combined()` instead of `list()`
+- **Changes made:**
+  - New `list_combined()` function collects both skills and agents
+  - Items sorted alphabetically by name
+  - Each item prefixed with `[skill]` (blue) or `[agent]` (magenta)
+  - Table format: TYPE, NAME, STATUS, REPOSITORY columns
+  - Existing `list()` function renamed to `list_skills_only()` for `sm skills list`
+  - Default shows enabled items only; --all shows all; --status filters
+  - 75 tests pass
+- **Learnings for future iterations:**
+  - Combined list commands collect items from multiple config sources (skills + agents)
+  - ItemType enum with derived Ord allows stable sorting by type when names match
+  - Use different console colors to visually distinguish item types in output
+
+---
+
+## 2026-01-18 - US-011
+- Implemented sm subagents list command
+- Files changed:
+  - `src/commands/subagent.rs` - Implemented list() function mirroring skill.rs pattern
+- **Changes made:**
+  - `list()` function reads config, filters agents by enabled status or --status flag
+  - Default behavior shows only enabled agents
+  - `--all` flag shows all agents (enabled and disabled)
+  - `--status enabled|disabled` filters by specific status
+  - `--name-only` outputs just agent names (one per line)
+  - Table format matches skills list: SUBAGENT, STATUS, REPOSITORY columns
+  - Shows helpful message when no enabled agents found pointing to --all flag
+  - 75 total tests pass
+- **Learnings for future iterations:**
+  - Subagent list follows the same pattern as skill list - mirror the structure
+  - Agent struct has same `enabled` field and filter logic as Skill struct
+  - Output format consistency matters: both use 80-char separator line, same column widths
+
+---
+
 ## 2026-01-18 - US-009
 - Implemented sm subagents enable command
 - Files changed:

@@ -180,8 +180,8 @@
         "cargo test passes"
       ],
       "priority": 11,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented in commit 53e2832 - list function with --all, --status, --name-only flags"
     },
     {
       "id": "US-012",
@@ -195,8 +195,8 @@
         "cargo test passes"
       ],
       "priority": 12,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented list_combined() function in skill.rs, sm list now shows both types"
     },
     {
       "id": "US-013",

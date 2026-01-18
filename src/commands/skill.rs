@@ -441,6 +441,11 @@ fn disable_with_lock(lock: &ConfigLock, skill_names_or_refs: &[String]) -> Resul
 }
 
 pub fn list(all: bool, status: Option<&str>, name_only: bool) -> Result<()> {
+    list_skills_only(all, status, name_only)
+}
+
+/// List only skills (used by `sm skills list`)
+pub fn list_skills_only(all: bool, status: Option<&str>, name_only: bool) -> Result<()> {
     let lock = ConfigLock::acquire()?;
     let config = lock.read_config()?;
 
@@ -535,6 +540,156 @@ pub fn list(all: bool, status: Option<&str>, name_only: bool) -> Result<()> {
             println!(
                 "{}",
                 style("To see all skills use: sm skills list --all").dim()
+            );
+        }
+    }
+
+    Ok(())
+}
+
+/// Combined list of skills and agents (used by `sm list`)
+pub fn list_combined(all: bool, status: Option<&str>, name_only: bool) -> Result<()> {
+    let lock = ConfigLock::acquire()?;
+    let config = lock.read_config()?;
+
+    let has_skills = !config.skills.is_empty();
+    let has_agents = !config.agents.is_empty();
+
+    if !has_skills && !has_agents {
+        println!("No skills or agents registered.");
+        return Ok(());
+    }
+
+    // Validate status filter if provided
+    if let Some(s) = status {
+        if s != "enabled" && s != "disabled" {
+            bail!("Invalid status '{}'. Use 'enabled' or 'disabled'.", s);
+        }
+    }
+
+    // Collect items: (type, name, enabled, repository)
+    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+    enum ItemType {
+        Agent,
+        Skill,
+    }
+
+    struct Item {
+        item_type: ItemType,
+        name: String,
+        enabled: bool,
+        repository: String,
+    }
+
+    let mut items: Vec<Item> = Vec::new();
+
+    // Add skills
+    for (name, skill) in &config.skills {
+        items.push(Item {
+            item_type: ItemType::Skill,
+            name: name.clone(),
+            enabled: skill.enabled,
+            repository: skill.repository.clone(),
+        });
+    }
+
+    // Add agents
+    for (name, agent) in &config.agents {
+        items.push(Item {
+            item_type: ItemType::Agent,
+            name: name.clone(),
+            enabled: agent.enabled,
+            repository: agent.repository.clone(),
+        });
+    }
+
+    // Sort by name (then by type for stability)
+    items.sort_by(|a, b| {
+        a.name.cmp(&b.name).then_with(|| a.item_type.cmp(&b.item_type))
+    });
+
+    // Filter items based on flags
+    let filtered_items: Vec<_> = items
+        .into_iter()
+        .filter(|item| {
+            // If --all is set, show all
+            if all {
+                return true;
+            }
+
+            // If --status is set, filter by status
+            if let Some(s) = status {
+                return if s == "enabled" {
+                    item.enabled
+                } else {
+                    !item.enabled
+                };
+            }
+
+            // Default: show only enabled items
+            item.enabled
+        })
+        .collect();
+
+    if filtered_items.is_empty() {
+        if status.is_some() {
+            println!("No {} skills or agents found.", status.unwrap());
+        } else if all {
+            println!("No skills or agents found.");
+        } else {
+            println!("No enabled skills or agents found.");
+            println!();
+            println!("{}", style("To see all items use: sm list --all").dim());
+        }
+        return Ok(());
+    }
+
+    // Output format: name-only or table
+    if name_only {
+        for item in filtered_items {
+            println!("{}", item.name);
+        }
+    } else {
+        // Print header
+        println!(
+            "{:<10}  {:<25}  {:<10}  {}",
+            style("TYPE").bold(),
+            style("NAME").bold(),
+            style("STATUS").bold(),
+            style("REPOSITORY").bold()
+        );
+
+        // Print separator
+        println!("{}", "-".repeat(80));
+
+        // Print each item
+        for item in filtered_items {
+            let type_str = match item.item_type {
+                ItemType::Skill => style("[skill]").blue(),
+                ItemType::Agent => style("[agent]").magenta(),
+            };
+
+            let status_str = if item.enabled {
+                style("enabled").green()
+            } else {
+                style("disabled").dim()
+            };
+
+            println!(
+                "{:<10}  {:<25}  {:<10}  {}",
+                type_str,
+                style(&item.name).cyan(),
+                status_str,
+                style(&item.repository).dim()
+            );
+        }
+
+        // Show helper message when default view (enabled only) is shown
+        if !all && status.is_none() {
+            println!();
+            println!(
+                "{}",
+                style("To see all items use: sm list --all").dim()
             );
         }
     }
