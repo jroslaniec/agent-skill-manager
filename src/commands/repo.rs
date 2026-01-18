@@ -83,10 +83,11 @@ pub fn add(url: &str) -> Result<()> {
         );
     }
 
-    // Scan for skills in the repository
+    // Scan for skills and agents in the repository
     let available_skills = scan_for_skills(&full_path)?;
+    let available_agents = scan_for_agents(&full_path)?;
 
-    // Add repository and register all skills as disabled
+    // Add repository and register all skills and agents as disabled
     lock.update(|config| {
         config.add_repository(
             repo_ref.repo_id.clone(),
@@ -116,13 +117,47 @@ pub fn add(url: &str) -> Result<()> {
             }
         }
 
+        // Register all detected agents as disabled
+        for agent_name in &available_agents {
+            let agent_path = if repo_ref.path.is_empty() {
+                agent_name.clone()
+            } else {
+                format!("{}/{}", repo_ref.path, agent_name)
+            };
+
+            // Only add if not already registered
+            if !config.has_agent(agent_name) {
+                config.add_agent(
+                    agent_name.clone(),
+                    repo_ref.repo_id.clone(),
+                    agent_path,
+                );
+                // Immediately disable it (add_agent enables by default)
+                config.disable_agent(agent_name).ok();
+            }
+        }
+
         Ok(())
     })?;
 
+    // Format the output message based on what was discovered
+    let items_discovered = match (available_skills.len(), available_agents.len()) {
+        (0, 0) => "no skills or agents".to_string(),
+        (s, 0) => format!("{} skill{}", s, if s == 1 { "" } else { "s" }),
+        (0, a) => format!("{} agent{}", a, if a == 1 { "" } else { "s" }),
+        (s, a) => format!(
+            "{} skill{}, {} agent{}",
+            s,
+            if s == 1 { "" } else { "s" },
+            a,
+            if a == 1 { "" } else { "s" }
+        ),
+    };
+
     println!(
-        "Added repository {} ({} skills)",
+        "Added repository {} ({})",
         style(&repo_ref.repo_id).cyan(),
-        available_skills.len()
+        items_discovered
     );
 
     Ok(())
@@ -407,6 +442,74 @@ fn reconcile_skills(
     Ok((removed_skills, added_skills))
 }
 
+/// Reconcile agents after repository upgrade - handle deleted/new agents
+fn reconcile_agents(
+    config: &mut crate::config::state::Config,
+    repo_id: &str,
+    new_agents: &[String],
+    repo_path: &str,
+) -> Result<(Vec<String>, Vec<String>)> {
+    use std::collections::HashSet;
+
+    let new_agents_set: HashSet<_> = new_agents.iter().collect();
+
+    // Get existing agents for this repository
+    let existing_agents: Vec<_> = config
+        .agents
+        .iter()
+        .filter(|(_, agent)| agent.repository == repo_id)
+        .map(|(name, agent)| (name.clone(), agent.clone()))
+        .collect();
+
+    let mut removed_agents = Vec::new();
+    let mut added_agents = Vec::new();
+
+    // Find deleted agents (exist in config but not in filesystem)
+    for (agent_name, _agent) in &existing_agents {
+        if !new_agents_set.contains(agent_name) {
+            // Agent was deleted from repository
+            removed_agents.push(agent_name.clone());
+
+            // Remove symlinks from all integrations
+            for (_int_name, integration) in &config.integrations {
+                if let Some(ref agents_dir_str) = integration.agents_dir {
+                    let agents_dir = PathBuf::from(agents_dir_str);
+                    let link_path = agents_dir.join(format!("{}.md", agent_name));
+                    if link_path.exists() || link_path.symlink_metadata().is_ok() {
+                        std::fs::remove_file(&link_path).ok();
+                    }
+                }
+            }
+
+            // Remove from config entirely
+            config.remove_agent(agent_name);
+        }
+    }
+
+    // Find new agents (exist in filesystem but not in config)
+    for agent_name in new_agents {
+        if !existing_agents.iter().any(|(name, _)| name == agent_name) {
+            added_agents.push(agent_name.clone());
+
+            // Add to config as disabled
+            let agent_path = if repo_path.is_empty() {
+                agent_name.clone()
+            } else {
+                format!("{}/{}", repo_path, agent_name)
+            };
+
+            config.add_agent(
+                agent_name.clone(),
+                repo_id.to_string(),
+                agent_path,
+            );
+            config.disable_agent(agent_name).ok();
+        }
+    }
+
+    Ok((removed_agents, added_agents))
+}
+
 pub fn upgrade(url: &str) -> Result<()> {
     let repo_ref = RepoRef::parse(url)?;
     let lock = ConfigLock::acquire()?;
@@ -437,17 +540,20 @@ fn upgrade_with_lock(repo_ref: &RepoRef, lock: &ConfigLock) -> Result<()> {
         git::checkout_sha(&repo_cache_path, target_sha)?;
         let actual_sha = git::get_current_sha(&repo_cache_path)?;
 
-        // Rescan skills
+        // Rescan skills and agents
         let full_path = if repo_ref.path.is_empty() {
             repo_cache_path.clone()
         } else {
             repo_cache_path.join(&repo_ref.path)
         };
         let new_skills = scan_for_skills(&full_path)?;
+        let new_agents = scan_for_agents(&full_path)?;
 
-        // Update repository and reconcile skills
-        let mut removed = Vec::new();
-        let mut added = Vec::new();
+        // Update repository and reconcile skills and agents
+        let mut removed_skills = Vec::new();
+        let mut added_skills = Vec::new();
+        let mut removed_agents = Vec::new();
+        let mut added_agents = Vec::new();
 
         lock.update(|config| {
             if let Some(repo) = config.repositories.get_mut(&repo_ref.repo_id) {
@@ -456,9 +562,14 @@ fn upgrade_with_lock(repo_ref: &RepoRef, lock: &ConfigLock) -> Result<()> {
             }
 
             // Reconcile skills - handle deleted and new skills
-            let (r, a) = reconcile_skills(config, &repo_ref.repo_id, &new_skills, &repo_ref.path)?;
-            removed = r;
-            added = a;
+            let (rs, as_) = reconcile_skills(config, &repo_ref.repo_id, &new_skills, &repo_ref.path)?;
+            removed_skills = rs;
+            added_skills = as_;
+
+            // Reconcile agents - handle deleted and new agents
+            let (ra, aa) = reconcile_agents(config, &repo_ref.repo_id, &new_agents, &repo_ref.path)?;
+            removed_agents = ra;
+            added_agents = aa;
 
             Ok(())
         })?;
@@ -470,16 +581,27 @@ fn upgrade_with_lock(repo_ref: &RepoRef, lock: &ConfigLock) -> Result<()> {
             style(&actual_sha).cyan()
         );
 
-        if !removed.is_empty() {
+        // Combine removed items for display
+        let all_removed: Vec<_> = removed_skills.iter()
+            .map(|s| format!("[skill] {}", s))
+            .chain(removed_agents.iter().map(|a| format!("[agent] {}", a)))
+            .collect();
+        if !all_removed.is_empty() {
             println!("{} Removed: {} (no longer available)",
                 style("⚠").yellow(),
-                removed.join(", ")
+                all_removed.join(", ")
             );
         }
-        if !added.is_empty() {
+
+        // Combine added items for display
+        let all_added: Vec<_> = added_skills.iter()
+            .map(|s| format!("[skill] {}", s))
+            .chain(added_agents.iter().map(|a| format!("[agent] {}", a)))
+            .collect();
+        if !all_added.is_empty() {
             println!("{} New: {}",
                 style("✓").green(),
-                added.join(", ")
+                all_added.join(", ")
             );
         }
     } else {
@@ -511,17 +633,20 @@ fn upgrade_with_lock(repo_ref: &RepoRef, lock: &ConfigLock) -> Result<()> {
             return Ok(());
         }
 
-        // Rescan skills
+        // Rescan skills and agents
         let full_path = if repo_ref.path.is_empty() {
             repo_cache_path.clone()
         } else {
             repo_cache_path.join(&repo_ref.path)
         };
         let new_skills = scan_for_skills(&full_path)?;
+        let new_agents = scan_for_agents(&full_path)?;
 
-        // Update repository and reconcile skills
-        let mut removed = Vec::new();
-        let mut added = Vec::new();
+        // Update repository and reconcile skills and agents
+        let mut removed_skills = Vec::new();
+        let mut added_skills = Vec::new();
+        let mut removed_agents = Vec::new();
+        let mut added_agents = Vec::new();
 
         lock.update(|config| {
             if let Some(repo) = config.repositories.get_mut(&repo_ref.repo_id) {
@@ -529,9 +654,14 @@ fn upgrade_with_lock(repo_ref: &RepoRef, lock: &ConfigLock) -> Result<()> {
             }
 
             // Reconcile skills - handle deleted and new skills
-            let (r, a) = reconcile_skills(config, &repo_ref.repo_id, &new_skills, &repo_ref.path)?;
-            removed = r;
-            added = a;
+            let (rs, as_) = reconcile_skills(config, &repo_ref.repo_id, &new_skills, &repo_ref.path)?;
+            removed_skills = rs;
+            added_skills = as_;
+
+            // Reconcile agents - handle deleted and new agents
+            let (ra, aa) = reconcile_agents(config, &repo_ref.repo_id, &new_agents, &repo_ref.path)?;
+            removed_agents = ra;
+            added_agents = aa;
 
             Ok(())
         })?;
@@ -544,16 +674,27 @@ fn upgrade_with_lock(repo_ref: &RepoRef, lock: &ConfigLock) -> Result<()> {
             style(&new_sha).cyan()
         );
 
-        if !removed.is_empty() {
+        // Combine removed items for display
+        let all_removed: Vec<_> = removed_skills.iter()
+            .map(|s| format!("[skill] {}", s))
+            .chain(removed_agents.iter().map(|a| format!("[agent] {}", a)))
+            .collect();
+        if !all_removed.is_empty() {
             println!("{} Removed: {} (no longer available)",
                 style("⚠").yellow(),
-                removed.join(", ")
+                all_removed.join(", ")
             );
         }
-        if !added.is_empty() {
+
+        // Combine added items for display
+        let all_added: Vec<_> = added_skills.iter()
+            .map(|s| format!("[skill] {}", s))
+            .chain(added_agents.iter().map(|a| format!("[agent] {}", a)))
+            .collect();
+        if !all_added.is_empty() {
             println!("{} New: {}",
                 style("✓").green(),
-                added.join(", ")
+                all_added.join(", ")
             );
         }
     }
@@ -659,4 +800,190 @@ fn scan_for_skills(path: &Path) -> Result<Vec<String>> {
 
     skills.sort();
     Ok(skills)
+}
+
+/// Scan a directory for agents (directories containing AGENT.md)
+fn scan_for_agents(path: &Path) -> Result<Vec<String>> {
+    let mut agents = Vec::new();
+
+    if !path.exists() {
+        return Ok(agents);
+    }
+
+    // Read directory entries
+    let entries = std::fs::read_dir(path).context("Failed to read directory")?;
+
+    for entry in entries {
+        let entry = entry?;
+        let entry_path = entry.path();
+
+        // Check if it's a directory
+        if entry_path.is_dir() {
+            // Check if it contains AGENT.md
+            let agent_md = entry_path.join("AGENT.md");
+            if agent_md.exists() {
+                if let Some(agent_name) = entry_path.file_name() {
+                    agents.push(agent_name.to_string_lossy().to_string());
+                }
+            }
+        }
+    }
+
+    agents.sort();
+    Ok(agents)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    fn create_skill_dir(parent: &Path, name: &str) {
+        let skill_dir = parent.join(name);
+        std::fs::create_dir_all(&skill_dir).unwrap();
+        std::fs::write(skill_dir.join("SKILL.md"), "# Test Skill\n").unwrap();
+    }
+
+    fn create_agent_dir(parent: &Path, name: &str) {
+        let agent_dir = parent.join(name);
+        std::fs::create_dir_all(&agent_dir).unwrap();
+        std::fs::write(agent_dir.join("AGENT.md"), "# Test Agent\n").unwrap();
+    }
+
+    #[test]
+    fn test_scan_for_agents_empty_dir() {
+        let temp_dir = TempDir::new().unwrap();
+        let agents = scan_for_agents(temp_dir.path()).unwrap();
+        assert!(agents.is_empty());
+    }
+
+    #[test]
+    fn test_scan_for_agents_finds_agents() {
+        let temp_dir = TempDir::new().unwrap();
+
+        create_agent_dir(temp_dir.path(), "code-reviewer");
+        create_agent_dir(temp_dir.path(), "debugger");
+
+        let agents = scan_for_agents(temp_dir.path()).unwrap();
+        assert_eq!(agents.len(), 2);
+        assert!(agents.contains(&"code-reviewer".to_string()));
+        assert!(agents.contains(&"debugger".to_string()));
+    }
+
+    #[test]
+    fn test_scan_for_agents_ignores_skills() {
+        let temp_dir = TempDir::new().unwrap();
+
+        create_skill_dir(temp_dir.path(), "git-commit");
+        create_agent_dir(temp_dir.path(), "code-reviewer");
+
+        let agents = scan_for_agents(temp_dir.path()).unwrap();
+        assert_eq!(agents.len(), 1);
+        assert!(agents.contains(&"code-reviewer".to_string()));
+        assert!(!agents.contains(&"git-commit".to_string()));
+    }
+
+    #[test]
+    fn test_scan_for_agents_ignores_dirs_without_agent_md() {
+        let temp_dir = TempDir::new().unwrap();
+
+        // Create a directory without AGENT.md
+        let plain_dir = temp_dir.path().join("plain-dir");
+        std::fs::create_dir_all(&plain_dir).unwrap();
+        std::fs::write(plain_dir.join("README.md"), "# Plain directory\n").unwrap();
+
+        create_agent_dir(temp_dir.path(), "code-reviewer");
+
+        let agents = scan_for_agents(temp_dir.path()).unwrap();
+        assert_eq!(agents.len(), 1);
+        assert!(agents.contains(&"code-reviewer".to_string()));
+    }
+
+    #[test]
+    fn test_scan_for_agents_nonexistent_path() {
+        let agents = scan_for_agents(Path::new("/nonexistent/path/12345")).unwrap();
+        assert!(agents.is_empty());
+    }
+
+    #[test]
+    fn test_scan_for_agents_sorted() {
+        let temp_dir = TempDir::new().unwrap();
+
+        create_agent_dir(temp_dir.path(), "zebra-agent");
+        create_agent_dir(temp_dir.path(), "alpha-agent");
+        create_agent_dir(temp_dir.path(), "middle-agent");
+
+        let agents = scan_for_agents(temp_dir.path()).unwrap();
+        assert_eq!(agents.len(), 3);
+        assert_eq!(agents[0], "alpha-agent");
+        assert_eq!(agents[1], "middle-agent");
+        assert_eq!(agents[2], "zebra-agent");
+    }
+
+    #[test]
+    fn test_scan_for_skills_finds_skills() {
+        let temp_dir = TempDir::new().unwrap();
+
+        create_skill_dir(temp_dir.path(), "git-commit");
+        create_skill_dir(temp_dir.path(), "pdf-reader");
+
+        let skills = scan_for_skills(temp_dir.path()).unwrap();
+        assert_eq!(skills.len(), 2);
+        assert!(skills.contains(&"git-commit".to_string()));
+        assert!(skills.contains(&"pdf-reader".to_string()));
+    }
+
+    #[test]
+    fn test_scan_for_skills_ignores_agents() {
+        let temp_dir = TempDir::new().unwrap();
+
+        create_skill_dir(temp_dir.path(), "git-commit");
+        create_agent_dir(temp_dir.path(), "code-reviewer");
+
+        let skills = scan_for_skills(temp_dir.path()).unwrap();
+        assert_eq!(skills.len(), 1);
+        assert!(skills.contains(&"git-commit".to_string()));
+        assert!(!skills.contains(&"code-reviewer".to_string()));
+    }
+
+    #[test]
+    fn test_mixed_skills_and_agents() {
+        let temp_dir = TempDir::new().unwrap();
+
+        create_skill_dir(temp_dir.path(), "git-commit");
+        create_skill_dir(temp_dir.path(), "pdf-reader");
+        create_agent_dir(temp_dir.path(), "code-reviewer");
+        create_agent_dir(temp_dir.path(), "debugger");
+
+        let skills = scan_for_skills(temp_dir.path()).unwrap();
+        let agents = scan_for_agents(temp_dir.path()).unwrap();
+
+        assert_eq!(skills.len(), 2);
+        assert_eq!(agents.len(), 2);
+
+        assert!(skills.contains(&"git-commit".to_string()));
+        assert!(skills.contains(&"pdf-reader".to_string()));
+        assert!(agents.contains(&"code-reviewer".to_string()));
+        assert!(agents.contains(&"debugger".to_string()));
+    }
+
+    #[test]
+    fn test_dir_with_both_skill_and_agent_md() {
+        // Test edge case: a directory containing both SKILL.md and AGENT.md
+        // Should be detected as both a skill and an agent
+        let temp_dir = TempDir::new().unwrap();
+
+        let dual_dir = temp_dir.path().join("dual-purpose");
+        std::fs::create_dir_all(&dual_dir).unwrap();
+        std::fs::write(dual_dir.join("SKILL.md"), "# Dual Skill\n").unwrap();
+        std::fs::write(dual_dir.join("AGENT.md"), "# Dual Agent\n").unwrap();
+
+        let skills = scan_for_skills(temp_dir.path()).unwrap();
+        let agents = scan_for_agents(temp_dir.path()).unwrap();
+
+        assert_eq!(skills.len(), 1);
+        assert_eq!(agents.len(), 1);
+        assert!(skills.contains(&"dual-purpose".to_string()));
+        assert!(agents.contains(&"dual-purpose".to_string()));
+    }
 }
