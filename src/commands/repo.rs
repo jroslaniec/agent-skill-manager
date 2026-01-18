@@ -40,8 +40,7 @@ pub fn add(url: &str) -> Result<()> {
     }
 
     // Determine where to clone the repo
-    let git_cache = paths::git_cache_dir()?;
-    let repo_cache_path = git_cache.join(repo_ref.cache_path());
+    let repo_cache_path = paths::repo_cache_path(&repo_ref)?;
 
     // Clone the repository if not already cloned
     if !repo_cache_path.exists() {
@@ -282,8 +281,7 @@ pub fn pin(url: &str) -> Result<()> {
     }
 
     // Get current SHA from git working directory
-    let git_cache = paths::git_cache_dir()?;
-    let repo_cache_path = git_cache.join(repo_ref.cache_path());
+    let repo_cache_path = paths::repo_cache_path(&repo_ref)?;
 
     let current_sha = git::get_current_sha(&repo_cache_path)?;
 
@@ -424,8 +422,7 @@ fn upgrade_with_lock(repo_ref: &RepoRef, lock: &ConfigLock) -> Result<()> {
         );
     }
 
-    let git_cache = paths::git_cache_dir()?;
-    let repo_cache_path = git_cache.join(repo_ref.cache_path());
+    let repo_cache_path = paths::repo_cache_path(repo_ref)?;
 
     if let Some(target_sha) = &repo_ref.sha {
         // Mode B: Upgrade to specific SHA and pin
