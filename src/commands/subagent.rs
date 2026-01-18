@@ -101,8 +101,105 @@ fn disable_with_lock(lock: &ConfigLock, agent_names_or_refs: &[String]) -> Resul
 }
 
 /// List subagents
-pub fn list(_all: bool, _status: Option<&str>, _name_only: bool) -> Result<()> {
-    eprintln!("Subagent list not yet implemented");
+pub fn list(all: bool, status: Option<&str>, name_only: bool) -> Result<()> {
+    let lock = ConfigLock::acquire()?;
+    let config = lock.read_config()?;
+
+    if config.agents.is_empty() {
+        println!("No subagents registered.");
+        return Ok(());
+    }
+
+    // Validate status filter if provided
+    if let Some(s) = status {
+        if s != "enabled" && s != "disabled" {
+            bail!("Invalid status '{}'. Use 'enabled' or 'disabled'.", s);
+        }
+    }
+
+    // Collect and sort agents by name
+    let mut agents: Vec<_> = config.agents.iter().collect();
+    agents.sort_by_key(|(name, _)| *name);
+
+    // Filter agents based on flags
+    let filtered_agents: Vec<_> = agents
+        .into_iter()
+        .filter(|(_, agent)| {
+            // If --all is set, show all
+            if all {
+                return true;
+            }
+
+            // If --status is set, filter by status
+            if let Some(s) = status {
+                return if s == "enabled" {
+                    agent.enabled
+                } else {
+                    !agent.enabled
+                };
+            }
+
+            // Default: show only enabled agents
+            agent.enabled
+        })
+        .collect();
+
+    if filtered_agents.is_empty() {
+        if status.is_some() {
+            println!("No {} subagents found.", status.unwrap());
+        } else if all {
+            println!("No subagents found.");
+        } else {
+            println!("No enabled subagents found.");
+            println!();
+            println!("{}", style("To see all subagents use: sm subagents list --all").dim());
+        }
+        return Ok(());
+    }
+
+    // Output format: name-only or table
+    if name_only {
+        for (name, _) in filtered_agents {
+            println!("{}", name);
+        }
+    } else {
+        // Print header
+        println!(
+            "{:<30}  {:<10}  {}",
+            style("SUBAGENT").bold(),
+            style("STATUS").bold(),
+            style("REPOSITORY").bold()
+        );
+
+        // Print separator
+        println!("{}", "-".repeat(80));
+
+        // Print each agent
+        for (name, agent) in filtered_agents {
+            let status = if agent.enabled {
+                style("enabled").green()
+            } else {
+                style("disabled").dim()
+            };
+
+            println!(
+                "{:<30}  {:<10}  {}",
+                style(name).cyan(),
+                status,
+                style(&agent.repository).dim()
+            );
+        }
+
+        // Show helper message when default view (enabled only) is shown
+        if !all && status.is_none() {
+            println!();
+            println!(
+                "{}",
+                style("To see all subagents use: sm subagents list --all").dim()
+            );
+        }
+    }
+
     Ok(())
 }
 
