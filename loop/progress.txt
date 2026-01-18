@@ -7,6 +7,32 @@
 - Unit tests must use placeholder data: testowner, testteam, testrepo, test-skills, example.com, etc. (no real usernames)
 - Git module: error messages must include repository path/URL and git's stderr (NFR-002)
 - Agent struct mirrors Skill struct: same fields (repository, *_path, enabled, enabled_at, disabled_at) and helper methods
+- Integration struct has skills_dir and agents_dir as Option<String>; use `if let Some(ref dir) = integration.skills_dir` pattern
+- Use `paths::get_builtin_agents_dir(name)` for agent directories (returns None for codex)
+- BuiltinIntegration struct in paths.rs has name, skills_dir (Option), agents_dir (Option)
+
+---
+
+## 2026-01-18 - US-006
+- Updated Integration model with agents_dir support
+- Files changed:
+  - `src/config/state.rs` - Integration struct now has skills_dir: Option<String> and agents_dir: Option<String>
+  - `src/paths.rs` - Added get_builtin_agents_dir(), BuiltinIntegration struct
+  - `src/commands/integration.rs` - Updated add/remove/list/configure for both directories
+  - `src/commands/repo.rs` - Updated to handle Option<String> skills_dir
+  - `src/commands/skill.rs` - Updated to handle Option<String> skills_dir
+  - `src/commands/purge.rs` - Added agent symlink cleanup
+- **Changes made:**
+  - Integration.skills_dir and agents_dir are now Option<String>
+  - Built-in integrations: claude-code (both), opencode (both), gemini-cli (both), codex (skills only)
+  - Integration list command shows both directories in columns
+  - Purge command cleans agent symlinks too
+  - 5 new unit tests for Integration with both/either/neither directory
+  - 62 total tests pass
+- **Learnings for future iterations:**
+  - Use `if let Some(ref dir_str) = integration.skills_dir` pattern to handle Option<String>
+  - Backward compatibility: serde deserializes old `skills_dir = "path"` into Some("path") automatically
+  - Use `#[serde(default, skip_serializing_if = "Option::is_none")]` for optional fields
 
 ---
 

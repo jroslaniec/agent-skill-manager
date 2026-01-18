@@ -1,0 +1,289 @@
+{
+  "prd": "0001-prd-universal-git-and-subagents",
+  "branchName": "feature/universal-git-and-subagents",
+  "description": "Extend Agent Skill Manager to support any git source (GitLab, Bitbucket, self-hosted, local paths) and add subagent management alongside skills",
+  "userStories": [
+    {
+      "id": "US-000",
+      "title": "Replace live data in unit tests with mock data",
+      "description": "As a developer, I want unit tests to use mock/placeholder data instead of real usernames and repository URLs so that tests don't reference live external data",
+      "acceptanceCriteria": [
+        "All test URLs use placeholder domains/owners (e.g., example.com/testowner/testrepo)",
+        "No real GitHub/GitLab usernames in test data (replace jroslaniec, j.roslaniec, anthropics, etc.)",
+        "Test repositories section in PRD is for manual testing only, not unit tests",
+        "cargo build passes",
+        "cargo test passes"
+      ],
+      "priority": 0,
+      "passes": true,
+      "notes": "Completed - replaced all real usernames and URLs with placeholder data (testowner, testteam, test.user, etc.)"
+    },
+    {
+      "id": "US-001",
+      "title": "Refactor reference parsing to support universal git URLs",
+      "description": "As a developer, I want the reference parser to accept any git URL format so that repositories from any source can be added",
+      "acceptanceCriteria": [
+        "skill_ref.rs supports parsing HTTPS URLs from any domain (not just github.com)",
+        "skill_ref.rs supports parsing SSH URLs (git@host:owner/repo.git format)",
+        "skill_ref.rs supports parsing local filesystem paths (absolute, relative, ~-prefixed)",
+        "Unit tests cover: GitLab HTTPS, SSH URLs, local paths, paths with spaces",
+        "cargo build passes",
+        "cargo test passes"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Implemented in commit 3936eea"
+    },
+    {
+      "id": "US-002",
+      "title": "Update cache directory structure for universal URLs",
+      "description": "As a developer, I want the cache directory to accommodate different URL formats so that all repositories can be stored consistently",
+      "acceptanceCriteria": [
+        "paths.rs generates unique cache paths for any git URL format",
+        "Cache path derivation handles special characters in URLs safely",
+        "Backward compatible with existing GitHub-only cache paths",
+        "cargo build passes",
+        "cargo test passes"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "Implemented in commit c400e7c - added repo_cache_path helper and comprehensive tests"
+    },
+    {
+      "id": "US-003",
+      "title": "Update git module to handle universal sources",
+      "description": "As a developer, I want the git module to clone and pull from any git source so that all repository types work",
+      "acceptanceCriteria": [
+        "git/mod.rs clone works with HTTPS URLs, SSH URLs, and local paths",
+        "git/mod.rs pull works with all source types",
+        "Error messages include original git error output for debugging",
+        "cargo build passes",
+        "cargo test passes"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": "Implemented in commit 3273fec - improved error messages, added integration tests (49 total tests pass)"
+    },
+    {
+      "id": "US-004",
+      "title": "Update repo add command for universal git URLs",
+      "description": "As a user, I want to run 'sm repo add' with any git URL so that I can add repositories from GitLab, Bitbucket, or local paths",
+      "acceptanceCriteria": [
+        "sm repo add accepts HTTPS URLs from any domain",
+        "sm repo add accepts SSH URLs (git@host:owner/repo.git)",
+        "sm repo add accepts local filesystem paths",
+        "Repository is cloned to cache and skills are discovered",
+        "cargo build passes",
+        "cargo test passes"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": "Implementation complete via US-001/US-002/US-003: RepoRef.parse() handles all URL types, paths.repo_cache_path() generates appropriate paths, git.clone_repo() works with any source"
+    },
+    {
+      "id": "US-005",
+      "title": "Add Agent data model to config",
+      "description": "As a developer, I want an Agent struct in the config so that subagents can be tracked alongside skills",
+      "acceptanceCriteria": [
+        "config/state.rs has Agent struct with repository, agent_path, enabled, enabled_at, disabled_at fields",
+        "Config struct includes agents: HashMap<String, Agent>",
+        "TOML serialization/deserialization works for agents",
+        "cargo build passes",
+        "cargo test passes"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": "Implemented in commit 4cd27cc - added Agent struct, Config.agents HashMap, helper methods, and 8 unit tests"
+    },
+    {
+      "id": "US-006",
+      "title": "Update Integration model with agents_dir",
+      "description": "As a developer, I want integrations to support separate skills_dir and agents_dir so that skills and agents symlink to correct locations",
+      "acceptanceCriteria": [
+        "Integration struct has skills_dir: Option<String> and agents_dir: Option<String>",
+        "Built-in integrations define default agents directories (claude-code: ~/.claude/agents/, etc.)",
+        "Backward compatible with existing configs (skills_dir can migrate from old field)",
+        "cargo build passes",
+        "cargo test passes"
+      ],
+      "priority": 6,
+      "passes": true,
+      "notes": "Implemented in commit 394d6c8 - Integration struct updated, 5 new tests, 62 total tests pass"
+    },
+    {
+      "id": "US-007",
+      "title": "Add AGENT.md discovery to repo scanning",
+      "description": "As a user, I want repositories to be scanned for AGENT.md files so that subagents are discovered automatically",
+      "acceptanceCriteria": [
+        "scan_for_skills() (or new scan_for_agents()) finds directories containing AGENT.md",
+        "Discovery runs during sm repo add",
+        "Agents are stored in config after discovery",
+        "cargo build passes",
+        "cargo test passes"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-008",
+      "title": "Add sm subagents CLI command group",
+      "description": "As a user, I want sm subagents commands so that I can manage subagents",
+      "acceptanceCriteria": [
+        "cli.rs has subagents command group with aliases: subagents, subagent, sb",
+        "Subcommands: enable, disable, list defined in CLI",
+        "cargo build passes",
+        "cargo test passes"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-009",
+      "title": "Implement sm subagents enable command",
+      "description": "As a user, I want to run 'sm subagents enable <ref>' so that subagents are symlinked to the agents directory",
+      "acceptanceCriteria": [
+        "sm subagents enable creates symlink: {agents_dir}/{name}.md -> cached AGENT.md file",
+        "Symlink is a file symlink (not directory) pointing to AGENT.md",
+        "Agent marked as enabled in config",
+        "cargo build passes",
+        "cargo test passes"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-010",
+      "title": "Implement sm subagents disable command",
+      "description": "As a user, I want to run 'sm subagents disable <ref>' so that subagent symlinks are removed",
+      "acceptanceCriteria": [
+        "sm subagents disable removes the {agents_dir}/{name}.md symlink",
+        "Agent marked as disabled in config with disabled_at timestamp",
+        "cargo build passes",
+        "cargo test passes"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-011",
+      "title": "Implement sm subagents list command",
+      "description": "As a user, I want to run 'sm subagents list' so that I can see available subagents",
+      "acceptanceCriteria": [
+        "sm subagents list shows enabled subagents by default",
+        "sm subagents list --all shows both enabled and disabled subagents",
+        "Output format matches skills list style",
+        "cargo build passes",
+        "cargo test passes"
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-012",
+      "title": "Update sm list to show both skills and agents",
+      "description": "As a user, I want 'sm list' to show both skills and agents with type prefixes so that I see everything in one view",
+      "acceptanceCriteria": [
+        "sm list shows both skills and agents",
+        "Each item has [skill] or [agent] prefix",
+        "Output format: '[skill]  name     enabled/disabled'",
+        "cargo build passes",
+        "cargo test passes"
+      ],
+      "priority": 12,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-013",
+      "title": "Add type filters to sm list command",
+      "description": "As a user, I want 'sm list --skills' and 'sm list --agents' filters so that I can focus on one type",
+      "acceptanceCriteria": [
+        "sm list --skills (-s) shows only skills",
+        "sm list --agents (-a) shows only agents",
+        "Filters work with --all flag",
+        "cargo build passes",
+        "cargo test passes"
+      ],
+      "priority": 13,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-014",
+      "title": "Remove sm enable/disable shortcut commands",
+      "description": "As a developer, I want to remove ambiguous shortcut commands so that users must specify skill or agent explicitly",
+      "acceptanceCriteria": [
+        "sm enable and sm disable commands are removed from CLI",
+        "Users must use sm skills enable or sm subagents enable",
+        "cargo build passes",
+        "cargo test passes"
+      ],
+      "priority": 14,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-015",
+      "title": "Update interactive mode for skills and agents",
+      "description": "As a user, I want interactive mode (sm) to show both skills and agents so that I can toggle them easily",
+      "acceptanceCriteria": [
+        "Interactive mode displays both skills and agents",
+        "Items have [skill]/[agent] type prefixes",
+        "Toggling creates/removes appropriate symlinks (directory for skills, file for agents)",
+        "cargo build passes",
+        "cargo test passes"
+      ],
+      "priority": 15,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-016",
+      "title": "Update sm integrations add with --agents-path",
+      "description": "As a user, I want to specify --agents-path when adding custom integrations so that agents go to the right directory",
+      "acceptanceCriteria": [
+        "sm integrations add accepts --agents-path flag for custom integrations",
+        "Built-in integrations use default agents_dir values",
+        "cargo build passes",
+        "cargo test passes"
+      ],
+      "priority": 16,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-017",
+      "title": "Update sm integrations list to show agents directory",
+      "description": "As a user, I want 'sm integrations list' to show both skills and agents directories so that I know where items are symlinked",
+      "acceptanceCriteria": [
+        "sm integrations list shows skills_dir and agents_dir for each integration",
+        "Handles integrations with only skills_dir or only agents_dir",
+        "cargo build passes",
+        "cargo test passes"
+      ],
+      "priority": 17,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-018",
+      "title": "Add integration tests for universal git sources",
+      "description": "As a developer, I want integration tests covering various git sources so that the feature is validated",
+      "acceptanceCriteria": [
+        "Integration test: clone from local path to cache",
+        "Integration test: enable skill creates directory symlink",
+        "Integration test: enable agent creates file symlink with .md extension",
+        "Integration test: list shows both types with filters",
+        "cargo test passes"
+      ],
+      "priority": 18,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}
