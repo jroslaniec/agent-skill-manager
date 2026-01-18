@@ -239,6 +239,17 @@ pub fn delete(url: &str, force: bool) -> Result<()> {
     Ok(())
 }
 
+/// Determine the git source type from a URL string
+fn url_to_source_type(url: &str) -> &'static str {
+    if url.starts_with("git@") {
+        "ssh"
+    } else if url.starts_with('/') || url.starts_with("file://") {
+        "local"
+    } else {
+        "https"
+    }
+}
+
 pub fn list() -> Result<()> {
     let lock = ConfigLock::acquire()?;
     let config = lock.read_config()?;
@@ -250,7 +261,8 @@ pub fn list() -> Result<()> {
 
     // Print header
     println!(
-        "{:<40}  {:>10}  {:>10}  {:<10}  {:<10}",
+        "{:<8}  {:<40}  {:>10}  {:>10}  {:<10}  {:<10}",
+        style("SOURCE").bold(),
         style("REPOSITORY").bold(),
         style("SKILLS").bold(),
         style("AGENTS").bold(),
@@ -259,10 +271,14 @@ pub fn list() -> Result<()> {
     );
 
     // Print separator
-    println!("{}", "-".repeat(90));
+    println!("{}", "-".repeat(100));
 
     // Print each repository
     for (repo_id, repo) in &config.repositories {
+        // Determine source type from the URL
+        let source_type = url_to_source_type(&repo.url);
+        let source_display = format!("[{}]", source_type);
+
         // Get all skills for this repository
         let skills = config.skills_for_repo(repo_id);
         let skills_total = skills.len();
@@ -296,7 +312,8 @@ pub fn list() -> Result<()> {
             .unwrap_or_else(|| "-".to_string());
 
         println!(
-            "{:<40}  {:>10}  {:>10}  {:<10}  {}",
+            "{:<8}  {:<40}  {:>10}  {:>10}  {:<10}  {}",
+            style(&source_display).magenta(),
             style(repo_id).cyan(),
             style(&skills_display).green(),
             style(&agents_display).blue(),
@@ -993,5 +1010,28 @@ mod tests {
         assert_eq!(agents.len(), 1);
         assert!(skills.contains(&"dual-purpose".to_string()));
         assert!(agents.contains(&"dual-purpose".to_string()));
+    }
+
+    // Tests for url_to_source_type
+
+    #[test]
+    fn test_url_to_source_type_https() {
+        assert_eq!(url_to_source_type("https://github.com/owner/repo.git"), "https");
+        assert_eq!(url_to_source_type("https://gitlab.com/team/project.git"), "https");
+        assert_eq!(url_to_source_type("http://example.com/repo.git"), "https");
+    }
+
+    #[test]
+    fn test_url_to_source_type_ssh() {
+        assert_eq!(url_to_source_type("git@github.com:owner/repo.git"), "ssh");
+        assert_eq!(url_to_source_type("git@gitlab.com:team/project.git"), "ssh");
+        assert_eq!(url_to_source_type("git@bitbucket.org:owner/repo.git"), "ssh");
+    }
+
+    #[test]
+    fn test_url_to_source_type_local() {
+        assert_eq!(url_to_source_type("/Users/dev/my-skills"), "local");
+        assert_eq!(url_to_source_type("/home/user/projects/skills"), "local");
+        assert_eq!(url_to_source_type("file:///path/to/repo"), "local");
     }
 }
