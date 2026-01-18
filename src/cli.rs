@@ -25,6 +25,13 @@ pub enum Command {
         action: SkillAction,
     },
 
+    /// Manage subagents
+    #[command(visible_aliases = ["subagent", "sb"])]
+    Subagents {
+        #[command(subcommand)]
+        action: SubagentAction,
+    },
+
     /// Cache utilities
     Cache {
         #[command(subcommand)]
@@ -172,6 +179,37 @@ pub enum SkillAction {
 pub enum CacheAction {
     /// Show cache directory path
     Dir,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum SubagentAction {
+    /// Enable one or more subagents
+    Enable {
+        /// Subagent names or references (e.g., "my-agent" or "github.com/owner/repo/my-agent")
+        agent_names_or_refs: Vec<String>,
+    },
+
+    /// Disable one or more subagents
+    Disable {
+        /// Subagent names or references (e.g., "my-agent" or "github.com/owner/repo/my-agent")
+        agent_names_or_refs: Vec<String>,
+    },
+
+    /// List all subagents
+    #[command(visible_aliases = ["ls"])]
+    List {
+        /// Show all subagents (enabled and disabled)
+        #[arg(short, long)]
+        all: bool,
+
+        /// Filter by status (enabled or disabled)
+        #[arg(long)]
+        status: Option<String>,
+
+        /// Show only subagent names (one per line)
+        #[arg(long)]
+        name_only: bool,
+    },
 }
 
 #[derive(Debug, Subcommand)]

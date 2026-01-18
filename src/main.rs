@@ -1,4 +1,4 @@
-use agent_skill_manager::cli::{Args, CacheAction, Command, IntegrationAction, RepoAction, SkillAction};
+use agent_skill_manager::cli::{Args, CacheAction, Command, IntegrationAction, RepoAction, SkillAction, SubagentAction};
 use agent_skill_manager::commands;
 use clap::Parser;
 
@@ -20,6 +20,13 @@ fn main() {
             SkillAction::Disable { skill_names_or_refs } => commands::skill::disable(&skill_names_or_refs),
             SkillAction::List { all, status, name_only } => {
                 commands::skill::list(all, status.as_deref(), name_only)
+            }
+        },
+        Some(Command::Subagents { action }) => match action {
+            SubagentAction::Enable { agent_names_or_refs } => commands::subagent::enable(&agent_names_or_refs),
+            SubagentAction::Disable { agent_names_or_refs } => commands::subagent::disable(&agent_names_or_refs),
+            SubagentAction::List { all, status, name_only } => {
+                commands::subagent::list(all, status.as_deref(), name_only)
             }
         },
         Some(Command::Cache { action }) => match action {
