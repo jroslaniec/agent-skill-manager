@@ -25,6 +25,7 @@ impl ConfigLock {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(true)
             .open(&lock_path)
             .context("Failed to open lock file")?;
 
@@ -45,8 +46,7 @@ impl ConfigLock {
             return Ok(Config::new());
         }
 
-        let mut file = File::open(&self.config_path)
-            .context("Failed to open config file")?;
+        let mut file = File::open(&self.config_path).context("Failed to open config file")?;
         let mut contents = String::new();
         file.read_to_string(&mut contents)
             .context("Failed to read config file")?;

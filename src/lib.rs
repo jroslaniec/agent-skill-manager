@@ -156,10 +156,7 @@ mod integration_tests {
         assert!(link.is_symlink(), "Link should be a symlink");
 
         // Verify it's a directory symlink (symlink resolves to a directory)
-        assert!(
-            link.is_dir(),
-            "Skill symlink should resolve to a directory"
-        );
+        assert!(link.is_dir(), "Skill symlink should resolve to a directory");
 
         // Verify we can read through the symlink
         let skill_md_content = fs::read_to_string(link.join("SKILL.md"))
@@ -257,10 +254,7 @@ mod integration_tests {
 
         // Verify agent symlink structure
         assert!(agent_link.is_symlink(), "Agent link should be a symlink");
-        assert!(
-            agent_link.is_file(),
-            "Agent link should resolve to a file"
-        );
+        assert!(agent_link.is_file(), "Agent link should resolve to a file");
         assert!(
             agent_link
                 .file_name()
@@ -272,7 +266,10 @@ mod integration_tests {
         );
         // Agent link IS the file (not a directory containing files)
         let content = fs::read_to_string(&agent_link).expect("Should read agent file");
-        assert!(content.contains("Test Agent Alpha"), "Should read agent content directly");
+        assert!(
+            content.contains("Test Agent Alpha"),
+            "Should read agent content directly"
+        );
     }
 
     /// Integration test: scan_for_skills and scan_for_agents find correct items

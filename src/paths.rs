@@ -4,8 +4,7 @@ use std::path::PathBuf;
 /// Get the cache directory for agent-skill-manager
 /// Always uses ~/.cache/agent-skill-manager on all platforms for consistency
 pub fn cache_dir() -> Result<PathBuf> {
-    let home = dirs::home_dir()
-        .context("Could not find home directory")?;
+    let home = dirs::home_dir().context("Could not find home directory")?;
     Ok(home.join(".cache").join("agent-skill-manager"))
 }
 
@@ -27,8 +26,7 @@ pub fn git_cache_dir() -> Result<PathBuf> {
 
 /// Get the Claude config directory (~/.claude)
 pub fn claude_dir() -> Result<PathBuf> {
-    let home = dirs::home_dir()
-        .context("Could not find home directory")?;
+    let home = dirs::home_dir().context("Could not find home directory")?;
     Ok(home.join(".claude"))
 }
 
@@ -48,7 +46,7 @@ pub fn ensure_dirs() -> Result<()> {
 /// e.g., "claude", "Claude", "claudecode" -> "claude-code"
 /// e.g., "opencode", "open-code", "OpenCode" -> "opencode"
 pub fn normalize_integration_name(input: &str) -> String {
-    let lower = input.to_lowercase().replace('-', "").replace('_', "");
+    let lower = input.to_lowercase().replace(['-', '_'], "");
     match lower.as_str() {
         "claude" | "claudecode" => "claude-code".to_string(),
         "opencode" => "opencode".to_string(),
@@ -105,7 +103,7 @@ pub fn builtin_integrations() -> Vec<BuiltinIntegration> {
         BuiltinIntegration {
             name: "codex",
             skills_dir: Some("~/.codex/skills"),
-            agents_dir: None,  // codex uses AGENTS.md
+            agents_dir: None, // codex uses AGENTS.md
         },
         BuiltinIntegration {
             name: "gemini-cli",
@@ -130,10 +128,9 @@ pub fn builtin_integrations_skills_only() -> Vec<(&'static str, &'static str)> {
 
 /// Expand ~ in path to home directory
 pub fn expand_tilde(path: &str) -> Result<PathBuf> {
-    if path.starts_with("~/") {
-        let home = dirs::home_dir()
-            .context("Could not find home directory")?;
-        Ok(home.join(&path[2..]))
+    if let Some(stripped) = path.strip_prefix("~/") {
+        let home = dirs::home_dir().context("Could not find home directory")?;
+        Ok(home.join(stripped))
     } else if path == "~" {
         dirs::home_dir().context("Could not find home directory")
     } else {
@@ -178,13 +175,15 @@ pub fn resolve_repo_cache_path(repo_ref: &crate::skill_ref::RepoRef) -> Result<P
 
     // For GitHub repos, check the legacy path (git/{owner}/{repo} without host)
     if repo_ref.repo_id.starts_with("github.com/") {
-        let legacy_path = repo_ref.repo_id.strip_prefix("github.com/")
+        let legacy_path = repo_ref
+            .repo_id
+            .strip_prefix("github.com/")
             .map(|rest| git_cache.join(rest));
 
-        if let Some(legacy) = legacy_path {
-            if legacy.exists() {
-                return Ok(legacy);
-            }
+        if let Some(legacy) = legacy_path
+            && legacy.exists()
+        {
+            return Ok(legacy);
         }
     }
 

@@ -1,4 +1,4 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use std::path::PathBuf;
 
 /// The type of git source
@@ -17,8 +17,8 @@ pub enum GitSourceType {
 pub struct SkillRef {
     pub owner: String,
     pub repo: String,
-    pub path: String,        // Path within repo (e.g., "nested/skills" or "git-commit")
-    pub skill_name: String,  // The skill directory name (e.g., "git-commit")
+    pub path: String, // Path within repo (e.g., "nested/skills" or "git-commit")
+    pub skill_name: String, // The skill directory name (e.g., "git-commit")
 }
 
 impl SkillRef {
@@ -83,7 +83,7 @@ impl SkillRef {
             format!("github.com/{}/{}", self.owner, self.repo)
         } else {
             // Path contains parent dirs, extract parent directory
-            let parent_path = self.path.rsplitn(2, '/').nth(1).unwrap_or("");
+            let parent_path = self.path.rsplit_once('/').map(|x| x.0).unwrap_or("");
             if parent_path.is_empty() {
                 format!("github.com/{}/{}", self.owner, self.repo)
             } else {
@@ -247,9 +247,7 @@ impl RepoRef {
                 stripped
             }
         } else {
-            reference
-                .strip_prefix("local:")
-                .unwrap_or(reference)
+            reference.strip_prefix("local:").unwrap_or(reference)
         };
 
         // Check if this looks like a Unix root directory without leading slash
@@ -274,8 +272,7 @@ impl RepoRef {
 
         // Expand ~ to home directory
         let expanded = if path_str.starts_with("~/") || path_str == "~" {
-            let home = dirs::home_dir()
-                .context("Could not find home directory")?;
+            let home = dirs::home_dir().context("Could not find home directory")?;
             if path_str == "~" {
                 home
             } else {
@@ -331,7 +328,8 @@ impl RepoRef {
 
         // Parse the URL to extract components
         // Format: https://host/path/to/repo.git or https://host/owner/repo/subpath
-        let url = normalized.strip_prefix("https://")
+        let url = normalized
+            .strip_prefix("https://")
             .or_else(|| normalized.strip_prefix("http://"))
             .context("Invalid URL format")?;
 
@@ -399,9 +397,9 @@ impl RepoRef {
     /// Extract @SHA or @tag suffix from a reference
     fn extract_sha_suffix(reference: &str) -> Result<(&str, Option<String>)> {
         // Don't split on @ for SSH URLs (git@...)
-        if reference.starts_with("git@") {
+        if let Some(rest) = reference.strip_prefix("git@") {
             // Find the last @ that isn't the git@ prefix
-            let rest = &reference[4..]; // Skip "git@"
+            // Skip "git@"
             if let Some(at_pos) = rest.rfind('@') {
                 let (_ref_part, sha_part) = rest.split_at(at_pos);
                 let sha_str = &sha_part[1..]; // Skip the @ character
@@ -431,10 +429,8 @@ impl RepoRef {
         }
 
         // Check if it looks like a SHA (all hex)
-        if sha.chars().all(|c| c.is_ascii_hexdigit()) {
-            if sha.len() < 7 || sha.len() > 40 {
-                bail!("Invalid SHA: must be between 7 and 40 characters");
-            }
+        if sha.chars().all(|c| c.is_ascii_hexdigit()) && (sha.len() < 7 || sha.len() > 40) {
+            bail!("Invalid SHA: must be between 7 and 40 characters");
         }
         // Otherwise accept as a tag reference (git will validate)
 
@@ -541,7 +537,8 @@ mod tests {
 
     #[test]
     fn test_parse_skill_ref_with_skill_md() {
-        let skill = SkillRef::parse("github.com/testowner/test-skills/git-commit/SKILL.md").unwrap();
+        let skill =
+            SkillRef::parse("github.com/testowner/test-skills/git-commit/SKILL.md").unwrap();
         assert_eq!(skill.path, "git-commit");
         assert_eq!(skill.skill_name, "git-commit");
     }
@@ -635,8 +632,14 @@ mod tests {
 
     #[test]
     fn test_parse_repo_ref_with_full_sha() {
-        let repo = RepoRef::parse("github.com/testowner/test-skills@489c9d85c422a184feb9f56dc7e60e4af721a131").unwrap();
-        assert_eq!(repo.sha, Some("489c9d85c422a184feb9f56dc7e60e4af721a131".to_string()));
+        let repo = RepoRef::parse(
+            "github.com/testowner/test-skills@489c9d85c422a184feb9f56dc7e60e4af721a131",
+        )
+        .unwrap();
+        assert_eq!(
+            repo.sha,
+            Some("489c9d85c422a184feb9f56dc7e60e4af721a131".to_string())
+        );
     }
 
     #[test]
@@ -684,7 +687,10 @@ mod tests {
         let repo = RepoRef::parse("git@gitlab.com:testgroup/subgroup/testrepo.git").unwrap();
         assert_eq!(repo.source_type, GitSourceType::Ssh);
         assert_eq!(repo.repo_id, "gitlab.com/testgroup/subgroup/testrepo");
-        assert_eq!(repo.git_url, "git@gitlab.com:testgroup/subgroup/testrepo.git");
+        assert_eq!(
+            repo.git_url,
+            "git@gitlab.com:testgroup/subgroup/testrepo.git"
+        );
     }
 
     #[test]
@@ -798,9 +804,15 @@ mod tests {
         assert!(RepoRef::looks_like_local_path("file:///path"));
         assert!(RepoRef::looks_like_local_path("local:/Users/dev/skills"));
 
-        assert!(!RepoRef::looks_like_local_path("github.com/testowner/testrepo"));
-        assert!(!RepoRef::looks_like_local_path("https://github.com/testowner/testrepo"));
-        assert!(!RepoRef::looks_like_local_path("git@github.com:testowner/testrepo.git"));
+        assert!(!RepoRef::looks_like_local_path(
+            "github.com/testowner/testrepo"
+        ));
+        assert!(!RepoRef::looks_like_local_path(
+            "https://github.com/testowner/testrepo"
+        ));
+        assert!(!RepoRef::looks_like_local_path(
+            "git@github.com:testowner/testrepo.git"
+        ));
     }
 
     #[test]
@@ -815,7 +827,10 @@ mod tests {
     #[test]
     fn test_clone_url() {
         let https = RepoRef::parse("github.com/testowner/testrepo").unwrap();
-        assert_eq!(https.clone_url(), "https://github.com/testowner/testrepo.git");
+        assert_eq!(
+            https.clone_url(),
+            "https://github.com/testowner/testrepo.git"
+        );
 
         let ssh = RepoRef::parse("git@github.com:testowner/testrepo.git").unwrap();
         assert_eq!(ssh.clone_url(), "git@github.com:testowner/testrepo.git");

@@ -1,4 +1,4 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use console::style;
 use std::path::PathBuf;
 
@@ -27,7 +27,10 @@ pub fn add(name: &str, custom_path: Option<&str>, custom_agents_path: Option<&st
     let (skills_dir, agents_dir) = match (custom_path, custom_agents_path) {
         (Some(path), Some(agents_path)) => {
             // Both custom paths provided
-            (Some(paths::expand_tilde(path)?), Some(paths::expand_tilde(agents_path)?))
+            (
+                Some(paths::expand_tilde(path)?),
+                Some(paths::expand_tilde(agents_path)?),
+            )
         }
         (Some(path), None) => {
             // Only skills path provided - for custom integrations
@@ -39,7 +42,10 @@ pub fn add(name: &str, custom_path: Option<&str>, custom_agents_path: Option<&st
         }
         (None, None) => {
             // No custom paths - use built-in defaults
-            match (paths::get_builtin_skills_dir(&normalized_name), paths::get_builtin_agents_dir(&normalized_name)) {
+            match (
+                paths::get_builtin_skills_dir(&normalized_name),
+                paths::get_builtin_agents_dir(&normalized_name),
+            ) {
                 (None, None) => {
                     bail!(
                         "Unknown integration '{}'. Use --path and/or --agents-path to specify directories.\n\
@@ -47,47 +53,51 @@ pub fn add(name: &str, custom_path: Option<&str>, custom_agents_path: Option<&st
                         name,
                         paths::builtin_integrations()
                             .iter()
-                            .map(|bi| format!("{} (skills: {}, agents: {})",
+                            .map(|bi| format!(
+                                "{} (skills: {}, agents: {})",
                                 bi.name,
                                 bi.skills_dir.unwrap_or("-"),
-                                bi.agents_dir.unwrap_or("-")))
+                                bi.agents_dir.unwrap_or("-")
+                            ))
                             .collect::<Vec<_>>()
                             .join(", ")
                     );
                 }
-                (skills, agents) => (skills, agents)
+                (skills, agents) => (skills, agents),
             }
         }
     };
 
     // Create directories if they don't exist
-    if let Some(ref dir) = skills_dir {
-        if !dir.exists() {
-            std::fs::create_dir_all(dir)
-                .context(format!("Failed to create skills directory: {}", dir.display()))?;
-            println!(
-                "Created skills directory: {}",
-                style(dir.display()).dim()
-            );
-        }
+    if let Some(ref dir) = skills_dir
+        && !dir.exists()
+    {
+        std::fs::create_dir_all(dir).context(format!(
+            "Failed to create skills directory: {}",
+            dir.display()
+        ))?;
+        println!("Created skills directory: {}", style(dir.display()).dim());
     }
 
-    if let Some(ref dir) = agents_dir {
-        if !dir.exists() {
-            std::fs::create_dir_all(dir)
-                .context(format!("Failed to create agents directory: {}", dir.display()))?;
-            println!(
-                "Created agents directory: {}",
-                style(dir.display()).dim()
-            );
-        }
+    if let Some(ref dir) = agents_dir
+        && !dir.exists()
+    {
+        std::fs::create_dir_all(dir).context(format!(
+            "Failed to create agents directory: {}",
+            dir.display()
+        ))?;
+        println!("Created agents directory: {}", style(dir.display()).dim());
     }
 
     // Add integration to config
     let skills_dir_str = skills_dir.map(|p| p.to_string_lossy().to_string());
     let agents_dir_str = agents_dir.map(|p| p.to_string_lossy().to_string());
     lock.update(|config| {
-        config.add_integration(normalized_name.clone(), skills_dir_str.clone(), agents_dir_str.clone());
+        config.add_integration(
+            normalized_name.clone(),
+            skills_dir_str.clone(),
+            agents_dir_str.clone(),
+        );
         Ok(())
     })?;
 
@@ -125,12 +135,7 @@ pub fn add(name: &str, custom_path: Option<&str>, custom_agents_path: Option<&st
                         let link_path = skills_dir.join(skill_name);
                         match create_skill_symlink(&source_path, &link_path) {
                             Ok(_) => println!("  {} {}", style("*").green(), skill_name),
-                            Err(e) => println!(
-                                "  {} {}: {}",
-                                style("!").yellow(),
-                                skill_name,
-                                e
-                            ),
+                            Err(e) => println!("  {} {}: {}", style("!").yellow(), skill_name, e),
                         }
                     }
                 }
@@ -170,12 +175,7 @@ pub fn remove(name: &str) -> Result<()> {
                 if link_path.is_symlink() {
                     match std::fs::remove_file(&link_path) {
                         Ok(_) => println!("  {} {}", style("-").red(), skill_name),
-                        Err(e) => println!(
-                            "  {} {}: {}",
-                            style("!").yellow(),
-                            skill_name,
-                            e
-                        ),
+                        Err(e) => println!("  {} {}: {}", style("!").yellow(), skill_name, e),
                     }
                 }
             }
@@ -194,12 +194,7 @@ pub fn remove(name: &str) -> Result<()> {
                 if link_path.is_symlink() {
                     match std::fs::remove_file(&link_path) {
                         Ok(_) => println!("  {} {}", style("-").red(), agent_name),
-                        Err(e) => println!(
-                            "  {} {}: {}",
-                            style("!").yellow(),
-                            agent_name,
-                            e
-                        ),
+                        Err(e) => println!("  {} {}: {}", style("!").yellow(), agent_name, e),
                     }
                 }
             }
@@ -212,10 +207,7 @@ pub fn remove(name: &str) -> Result<()> {
         Ok(())
     })?;
 
-    println!(
-        "Removed integration {}",
-        style(&normalized_name).red()
-    );
+    println!("Removed integration {}", style(&normalized_name).red());
 
     Ok(())
 }
@@ -238,9 +230,18 @@ pub fn list() -> Result<()> {
     println!("{}", "-".repeat(100));
 
     // Helper to check if any configured directory exists
-    fn check_status(skills_dir: &Option<String>, agents_dir: &Option<String>) -> console::StyledObject<&'static str> {
-        let skills_ok = skills_dir.as_ref().map(|p| PathBuf::from(p).exists()).unwrap_or(true);
-        let agents_ok = agents_dir.as_ref().map(|p| PathBuf::from(p).exists()).unwrap_or(true);
+    fn check_status(
+        skills_dir: &Option<String>,
+        agents_dir: &Option<String>,
+    ) -> console::StyledObject<&'static str> {
+        let skills_ok = skills_dir
+            .as_ref()
+            .map(|p| PathBuf::from(p).exists())
+            .unwrap_or(true);
+        let agents_ok = agents_dir
+            .as_ref()
+            .map(|p| PathBuf::from(p).exists())
+            .unwrap_or(true);
         if skills_ok && agents_ok {
             style("enabled").green()
         } else {

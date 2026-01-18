@@ -1,4 +1,4 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use console::style;
 use std::collections::HashMap;
 use std::io::IsTerminal;
@@ -6,8 +6,8 @@ use std::os::unix::fs as unix_fs;
 use std::path::{Path, PathBuf};
 
 use crate::commands::subagent;
-use crate::config::state::Config;
 use crate::config::ConfigLock;
+use crate::config::state::Config;
 use crate::git;
 use crate::paths;
 use crate::skill_ref::{RepoRef, SkillRef};
@@ -43,10 +43,7 @@ pub fn add(skill_refs: &[String], interactive: bool) -> Result<()> {
                     eprintln!("  sm skills enable <skill-name>");
                 } else {
                     // Neither a valid skill reference nor a valid repo URL
-                    eprintln!(
-                        "Error: '{}' is not a valid skill reference.",
-                        skill_ref
-                    );
+                    eprintln!("Error: '{}' is not a valid skill reference.", skill_ref);
                     eprintln!();
                     eprintln!("Skill references should include the skill path, e.g.:");
                     eprintln!("  host.com/owner/repo/skill-name");
@@ -64,7 +61,7 @@ pub fn add(skill_refs: &[String], interactive: bool) -> Result<()> {
     let mut skills_by_repo: HashMap<String, Vec<SkillRef>> = HashMap::new();
     for skill in skills {
         let repo_id = skill.repo_id();
-        skills_by_repo.entry(repo_id).or_insert_with(Vec::new).push(skill);
+        skills_by_repo.entry(repo_id).or_default().push(skill);
     }
 
     let mut had_errors = false;
@@ -86,16 +83,19 @@ pub fn add(skill_refs: &[String], interactive: bool) -> Result<()> {
             println!("Repository {} in cache", style(&repo_id).cyan());
 
             // Mark for update check later
-            let is_pinned = config.repositories.get(&repo_id)
+            let is_pinned = config
+                .repositories
+                .get(&repo_id)
                 .and_then(|r| r.pinned_sha.as_ref())
                 .is_some();
             repos_to_check_updates.push((repo_id.clone(), is_pinned));
         } else {
             // New repository - check for conflicts with same git repo, different path
             let git_repo_key = format!("{}/{}", first_skill.owner, first_skill.repo);
-            for (existing_repo_id, _) in &config.repositories {
+            for existing_repo_id in config.repositories.keys() {
                 if existing_repo_id.starts_with(&format!("github.com/{}", git_repo_key))
-                    && existing_repo_id != &repo_id {
+                    && existing_repo_id != &repo_id
+                {
                     bail!(
                         "Cannot add {}. A different path from the same git repository is already registered: {}\nOnly one skill repository per git repository is allowed.",
                         repo_id,
@@ -121,7 +121,7 @@ pub fn add(skill_refs: &[String], interactive: bool) -> Result<()> {
                 repo_cache_path.clone()
             } else {
                 // Path contains parent dirs (e.g., "skills/git-commit"), scan parent
-                let parent_path = first_skill.path.rsplitn(2, '/').nth(1).unwrap_or("");
+                let parent_path = first_skill.path.rsplit_once('/').map(|x| x.0).unwrap_or("");
                 if parent_path.is_empty() {
                     repo_cache_path.clone()
                 } else {
@@ -139,7 +139,10 @@ pub fn add(skill_refs: &[String], interactive: bool) -> Result<()> {
                 String::new()
             } else {
                 // Path contains parent dirs, extract parent
-                first_skill.path.rsplitn(2, '/').nth(1).unwrap_or("").to_string()
+                first_skill
+                    .path
+                    .rsplit_once('/')
+                    .map_or_else(String::new, |x| x.0.to_string())
             };
 
             // Add repository to config
@@ -184,8 +187,7 @@ pub fn add(skill_refs: &[String], interactive: bool) -> Result<()> {
             if !source_path.exists() {
                 eprintln!(
                     "Error: Skill path '{}' does not exist in repository {}",
-                    skill.path,
-                    repo_id
+                    skill.path, repo_id
                 );
                 had_errors = true;
                 continue;
@@ -208,7 +210,10 @@ pub fn add(skill_refs: &[String], interactive: bool) -> Result<()> {
             if let Some(existing_skill) = config.skills.get(&skill.skill_name) {
                 // Skill exists - check if it's already enabled
                 if existing_skill.enabled {
-                    println!("Skill {} is already enabled", style(&skill.skill_name).cyan());
+                    println!(
+                        "Skill {} is already enabled",
+                        style(&skill.skill_name).cyan()
+                    );
                     continue;
                 }
 
@@ -217,7 +222,11 @@ pub fn add(skill_refs: &[String], interactive: bool) -> Result<()> {
 
                 // Create symlinks in all integrations
                 let config = lock.read_config()?;
-                create_skill_symlinks_for_all_integrations(&source_path, &skill.skill_name, &config)?;
+                create_skill_symlinks_for_all_integrations(
+                    &source_path,
+                    &skill.skill_name,
+                    &config,
+                )?;
 
                 println!("Enabled {}", style(&skill.skill_name).cyan());
             } else {
@@ -235,10 +244,18 @@ pub fn add(skill_refs: &[String], interactive: bool) -> Result<()> {
                 require_integrations(&config)?;
 
                 // Create symlinks in all integrations
-                create_skill_symlinks_for_all_integrations(&source_path, &skill.skill_name, &config)?;
+                create_skill_symlinks_for_all_integrations(
+                    &source_path,
+                    &skill.skill_name,
+                    &config,
+                )?;
 
                 lock.update(|config| {
-                    config.add_skill(skill.skill_name.clone(), repo_id.clone(), skill.path.clone());
+                    config.add_skill(
+                        skill.skill_name.clone(),
+                        repo_id.clone(),
+                        skill.path.clone(),
+                    );
                     Ok(())
                 })?;
 
@@ -250,22 +267,22 @@ pub fn add(skill_refs: &[String], interactive: bool) -> Result<()> {
     // Check for updates on cached repositories
     let config = lock.read_config()?;
     for (repo_id, is_pinned) in repos_to_check_updates {
-        if let Some(has_updates) = check_for_updates(&repo_id, &config)? {
-            if has_updates {
-                println!();
-                if is_pinned {
-                    println!(
-                        "Repository {} has updates available (pinned)",
-                        style(&repo_id).cyan()
-                    );
-                } else {
-                    println!(
-                        "Repository {} has updates available",
-                        style(&repo_id).cyan()
-                    );
-                }
-                println!("Run: sm repo upgrade {}", repo_id);
+        if let Some(has_updates) = check_for_updates(&repo_id, &config)?
+            && has_updates
+        {
+            println!();
+            if is_pinned {
+                println!(
+                    "Repository {} has updates available (pinned)",
+                    style(&repo_id).cyan()
+                );
+            } else {
+                println!(
+                    "Repository {} has updates available",
+                    style(&repo_id).cyan()
+                );
             }
+            println!("Run: sm repo upgrade {}", repo_id);
         }
     }
 
@@ -308,10 +325,7 @@ fn enable_with_lock(lock: &ConfigLock, skill_names_or_refs: &[String]) -> Result
             let source_path = repo_cache_path.join(&skill_info.skill_path);
             create_skill_symlinks_for_all_integrations(&source_path, skill_name_or_ref, &config)?;
 
-            println!(
-                "Enabled skill {}",
-                style(skill_name_or_ref).cyan()
-            );
+            println!("Enabled skill {}", style(skill_name_or_ref).cyan());
             continue;
         }
 
@@ -333,12 +347,13 @@ fn enable_with_lock(lock: &ConfigLock, skill_names_or_refs: &[String]) -> Result
                 // Create symlinks in all integrations
                 let config = lock.read_config()?;
                 let source_path = get_skill_source_path(&skill)?;
-                create_skill_symlinks_for_all_integrations(&source_path, &skill.skill_name, &config)?;
+                create_skill_symlinks_for_all_integrations(
+                    &source_path,
+                    &skill.skill_name,
+                    &config,
+                )?;
 
-                println!(
-                    "Enabled skill {}",
-                    style(&skill.skill_name).cyan()
-                );
+                println!("Enabled skill {}", style(&skill.skill_name).cyan());
                 continue;
             }
         }
@@ -366,7 +381,13 @@ fn enable_with_lock(lock: &ConfigLock, skill_names_or_refs: &[String]) -> Result
 
             // Add repository to config and persist
             lock.update(|config| {
-                config.add_repository(repo_id.clone(), skill.git_url(), String::new(), current_sha, None);
+                config.add_repository(
+                    repo_id.clone(),
+                    skill.git_url(),
+                    String::new(),
+                    current_sha,
+                    None,
+                );
                 Ok(())
             })?;
         }
@@ -406,14 +427,15 @@ fn enable_with_lock(lock: &ConfigLock, skill_names_or_refs: &[String]) -> Result
 
         // Add skill to config
         lock.update(|config| {
-            config.add_skill(skill.skill_name.clone(), repo_id.clone(), skill.path.clone());
+            config.add_skill(
+                skill.skill_name.clone(),
+                repo_id.clone(),
+                skill.path.clone(),
+            );
             Ok(())
         })?;
 
-        println!(
-            "Enabled skill {}",
-            style(&skill.skill_name).cyan()
-        );
+        println!("Enabled skill {}", style(&skill.skill_name).cyan());
     }
 
     Ok(())
@@ -446,10 +468,7 @@ fn disable_with_lock(lock: &ConfigLock, skill_names_or_refs: &[String]) -> Resul
 
         let existing_skill = config.skills.get(&skill_name).unwrap();
         if !existing_skill.enabled {
-            println!(
-                "Skill {} is already disabled",
-                style(&skill_name).dim()
-            );
+            println!("Skill {} is already disabled", style(&skill_name).dim());
             continue;
         }
 
@@ -459,10 +478,7 @@ fn disable_with_lock(lock: &ConfigLock, skill_names_or_refs: &[String]) -> Resul
         // Update config
         lock.update(|config| config.disable_skill(&skill_name))?;
 
-        println!(
-            "Disabled skill {}",
-            style(&skill_name).cyan()
-        );
+        println!("Disabled skill {}", style(&skill_name).cyan());
     }
 
     Ok(())
@@ -483,10 +499,11 @@ pub fn list_skills_only(all: bool, status: Option<&str>, name_only: bool) -> Res
     }
 
     // Validate status filter if provided
-    if let Some(s) = status {
-        if s != "enabled" && s != "disabled" {
-            bail!("Invalid status '{}'. Use 'enabled' or 'disabled'.", s);
-        }
+    if let Some(s) = status
+        && s != "enabled"
+        && s != "disabled"
+    {
+        bail!("Invalid status '{}'. Use 'enabled' or 'disabled'.", s);
     }
 
     // Collect and sort skills by name
@@ -517,14 +534,17 @@ pub fn list_skills_only(all: bool, status: Option<&str>, name_only: bool) -> Res
         .collect();
 
     if filtered_skills.is_empty() {
-        if status.is_some() {
-            println!("No {} skills found.", status.unwrap());
+        if let Some(s) = status {
+            println!("No {} skills found.", s);
         } else if all {
             println!("No skills found.");
         } else {
             println!("No enabled skills found.");
             println!();
-            println!("{}", style("To see all skills use: sm skills list --all").dim());
+            println!(
+                "{}",
+                style("To see all skills use: sm skills list --all").dim()
+            );
         }
         return Ok(());
     }
@@ -576,7 +596,13 @@ pub fn list_skills_only(all: bool, status: Option<&str>, name_only: bool) -> Res
 }
 
 /// Combined list of skills and agents (used by `sm list`)
-pub fn list_combined(all: bool, status: Option<&str>, name_only: bool, skills_only: bool, agents_only: bool) -> Result<()> {
+pub fn list_combined(
+    all: bool,
+    status: Option<&str>,
+    name_only: bool,
+    skills_only: bool,
+    agents_only: bool,
+) -> Result<()> {
     let lock = ConfigLock::acquire()?;
     let config = lock.read_config()?;
 
@@ -589,10 +615,11 @@ pub fn list_combined(all: bool, status: Option<&str>, name_only: bool, skills_on
     }
 
     // Validate status filter if provided
-    if let Some(s) = status {
-        if s != "enabled" && s != "disabled" {
-            bail!("Invalid status '{}'. Use 'enabled' or 'disabled'.", s);
-        }
+    if let Some(s) = status
+        && s != "enabled"
+        && s != "disabled"
+    {
+        bail!("Invalid status '{}'. Use 'enabled' or 'disabled'.", s);
     }
 
     // Collect items: (type, name, enabled, repository)
@@ -612,8 +639,8 @@ pub fn list_combined(all: bool, status: Option<&str>, name_only: bool, skills_on
     let mut items: Vec<Item> = Vec::new();
 
     // Determine what to show: if both flags are set, show both (like no flags)
-    let show_skills = !agents_only || (skills_only && agents_only);
-    let show_agents = !skills_only || (skills_only && agents_only);
+    let show_skills = !agents_only || skills_only;
+    let show_agents = !skills_only || agents_only;
 
     // Add skills (unless --agents flag is set, unless both flags are set)
     if show_skills {
@@ -641,7 +668,9 @@ pub fn list_combined(all: bool, status: Option<&str>, name_only: bool, skills_on
 
     // Sort by name (then by type for stability)
     items.sort_by(|a, b| {
-        a.name.cmp(&b.name).then_with(|| a.item_type.cmp(&b.item_type))
+        a.name
+            .cmp(&b.name)
+            .then_with(|| a.item_type.cmp(&b.item_type))
     });
 
     // Filter items based on flags
@@ -676,8 +705,8 @@ pub fn list_combined(all: bool, status: Option<&str>, name_only: bool, skills_on
             "skills or agents"
         };
 
-        if status.is_some() {
-            println!("No {} {} found.", status.unwrap(), type_desc);
+        if let Some(s) = status {
+            println!("No {} {} found.", s, type_desc);
         } else if all {
             println!("No {} found.", type_desc);
         } else {
@@ -731,10 +760,7 @@ pub fn list_combined(all: bool, status: Option<&str>, name_only: bool, skills_on
         // Show helper message when default view (enabled only) is shown
         if !all && status.is_none() {
             println!();
-            println!(
-                "{}",
-                style("To see all items use: sm list --all").dim()
-            );
+            println!("{}", style("To see all items use: sm list --all").dim());
         }
     }
 
@@ -744,7 +770,9 @@ pub fn list_combined(all: bool, status: Option<&str>, name_only: bool, skills_on
 pub fn manage() -> Result<()> {
     // Check if running in an interactive terminal
     if !std::io::stdin().is_terminal() {
-        bail!("Interactive mode requires a TTY. Please run this command in an interactive terminal.");
+        bail!(
+            "Interactive mode requires a TTY. Please run this command in an interactive terminal."
+        );
     }
 
     let lock = ConfigLock::acquire()?;
@@ -804,7 +832,9 @@ pub fn manage() -> Result<()> {
         // Scan for skills
         let skills = scan_for_skills(&scan_path)?;
         for skill_name in skills {
-            let enabled = config.skills.get(&skill_name)
+            let enabled = config
+                .skills
+                .get(&skill_name)
                 .map(|s| s.enabled)
                 .unwrap_or(false);
 
@@ -819,7 +849,9 @@ pub fn manage() -> Result<()> {
         // Scan for agents
         let agents = scan_for_agents(&scan_path)?;
         for agent_name in agents {
-            let enabled = config.agents.get(&agent_name)
+            let enabled = config
+                .agents
+                .get(&agent_name)
                 .map(|a| a.enabled)
                 .unwrap_or(false);
 
@@ -839,13 +871,13 @@ pub fn manage() -> Result<()> {
 
     // Sort by name, then by type for stability
     all_items.sort_by(|a, b| {
-        a.name.cmp(&b.name).then_with(|| {
-            match (&a.item_type, &b.item_type) {
+        a.name
+            .cmp(&b.name)
+            .then_with(|| match (&a.item_type, &b.item_type) {
                 (ItemType::Skill, ItemType::Agent) => std::cmp::Ordering::Less,
                 (ItemType::Agent, ItemType::Skill) => std::cmp::Ordering::Greater,
                 _ => std::cmp::Ordering::Equal,
-            }
-        })
+            })
     });
 
     // Build options for multi-select with colored type prefixes
@@ -944,12 +976,16 @@ pub fn manage() -> Result<()> {
 fn add_interactive(lock: &ConfigLock, skill_refs: &[String]) -> Result<()> {
     // Check if running in an interactive terminal
     if !std::io::stdin().is_terminal() {
-        bail!("Interactive mode requires a TTY. Please run this command in an interactive terminal.");
+        bail!(
+            "Interactive mode requires a TTY. Please run this command in an interactive terminal."
+        );
     }
 
     // Validate exactly one argument (the repository URL)
     if skill_refs.len() != 1 {
-        bail!("Interactive mode requires exactly one repository URL.\nUsage: sm add -i <repository-url>");
+        bail!(
+            "Interactive mode requires exactly one repository URL.\nUsage: sm add -i <repository-url>"
+        );
     }
 
     let repo_url = &skill_refs[0];
@@ -966,10 +1002,14 @@ fn add_interactive(lock: &ConfigLock, skill_refs: &[String]) -> Result<()> {
     if !config.has_repository(&repo_id) {
         // Check for conflicts with same git repo, different path (only for remote repos)
         if repo_ref.source_type != crate::skill_ref::GitSourceType::Local {
-            let base_repo_id = repo_ref.repo_id.split('/').take(3).collect::<Vec<_>>().join("/");
-            for (existing_repo_id, _) in &config.repositories {
-                if existing_repo_id.starts_with(&base_repo_id)
-                    && existing_repo_id != &repo_id {
+            let base_repo_id = repo_ref
+                .repo_id
+                .split('/')
+                .take(3)
+                .collect::<Vec<_>>()
+                .join("/");
+            for existing_repo_id in config.repositories.keys() {
+                if existing_repo_id.starts_with(&base_repo_id) && existing_repo_id != &repo_id {
                     bail!(
                         "Cannot add {}. A different path from the same git repository is already registered: {}\nOnly one skill repository per git repository is allowed.",
                         repo_id,
@@ -1004,7 +1044,13 @@ fn add_interactive(lock: &ConfigLock, skill_refs: &[String]) -> Result<()> {
 
         // Add repository to config and register all skills as disabled
         lock.update(|config| {
-            config.add_repository(repo_id.clone(), repo_ref.clone_url().to_string(), repo_ref.path.clone(), current_sha, None);
+            config.add_repository(
+                repo_id.clone(),
+                repo_ref.clone_url().to_string(),
+                repo_ref.path.clone(),
+                current_sha,
+                None,
+            );
 
             // Register all detected skills as disabled
             for skill_name in &available_skills {
@@ -1023,7 +1069,11 @@ fn add_interactive(lock: &ConfigLock, skill_refs: &[String]) -> Result<()> {
             Ok(())
         })?;
 
-        println!("Added repository {} ({} skills)", style(&repo_id).cyan(), available_skills.len());
+        println!(
+            "Added repository {} ({} skills)",
+            style(&repo_id).cyan(),
+            available_skills.len()
+        );
     } else {
         println!("Repository {} already registered", style(&repo_id).cyan());
     }
@@ -1057,7 +1107,9 @@ fn add_interactive(lock: &ConfigLock, skill_refs: &[String]) -> Result<()> {
 
     // Add skills
     for skill_name in skill_names {
-        let enabled = config.skills.get(&skill_name)
+        let enabled = config
+            .skills
+            .get(&skill_name)
             .map(|s| s.enabled)
             .unwrap_or(false);
 
@@ -1070,7 +1122,9 @@ fn add_interactive(lock: &ConfigLock, skill_refs: &[String]) -> Result<()> {
 
     // Add agents
     for agent_name in agent_names {
-        let enabled = config.agents.get(&agent_name)
+        let enabled = config
+            .agents
+            .get(&agent_name)
             .map(|a| a.enabled)
             .unwrap_or(false);
 
@@ -1082,12 +1136,10 @@ fn add_interactive(lock: &ConfigLock, skill_refs: &[String]) -> Result<()> {
     }
 
     // Sort items: skills first, then agents, then by name within each type
-    items.sort_by(|a, b| {
-        match (&a.item_type, &b.item_type) {
-            (ItemType::Skill, ItemType::Agent) => std::cmp::Ordering::Less,
-            (ItemType::Agent, ItemType::Skill) => std::cmp::Ordering::Greater,
-            _ => a.name.cmp(&b.name),
-        }
+    items.sort_by(|a, b| match (&a.item_type, &b.item_type) {
+        (ItemType::Skill, ItemType::Agent) => std::cmp::Ordering::Less,
+        (ItemType::Agent, ItemType::Skill) => std::cmp::Ordering::Greater,
+        _ => a.name.cmp(&b.name),
     });
 
     // Build options for multi-select with colored type labels
@@ -1139,13 +1191,12 @@ fn add_interactive(lock: &ConfigLock, skill_refs: &[String]) -> Result<()> {
     let mut agents_to_disable: Vec<String> = Vec::new();
 
     for item in &items {
-        let should_be_enabled = selected_options.contains(
-            &if matches!(item.item_type, ItemType::Skill) {
-                format!("{} {}", style("[skill]").cyan().to_string(), item.name)
+        let should_be_enabled =
+            selected_options.contains(&if matches!(item.item_type, ItemType::Skill) {
+                format!("{} {}", style("[skill]").cyan(), item.name)
             } else {
-                format!("{} {}", style("[agent]").yellow().to_string(), item.name)
-            }
-        );
+                format!("{} {}", style("[agent]").yellow(), item.name)
+            });
 
         match &item.item_type {
             ItemType::Skill => {
@@ -1184,7 +1235,11 @@ fn add_interactive(lock: &ConfigLock, skill_refs: &[String]) -> Result<()> {
     }
 
     // Show summary
-    if skills_to_enable.is_empty() && skills_to_disable.is_empty() && agents_to_enable.is_empty() && agents_to_disable.is_empty() {
+    if skills_to_enable.is_empty()
+        && skills_to_disable.is_empty()
+        && agents_to_enable.is_empty()
+        && agents_to_disable.is_empty()
+    {
         println!("No changes made");
     }
 
@@ -1212,8 +1267,7 @@ pub fn create_skill_symlink(source: &PathBuf, link: &PathBuf) -> Result<()> {
         }
     }
 
-    unix_fs::symlink(source, link)
-        .context("Failed to create symlink")?;
+    unix_fs::symlink(source, link).context("Failed to create symlink")?;
 
     Ok(())
 }
@@ -1246,11 +1300,11 @@ fn create_skill_symlinks_for_all_integrations(
         let skills_dir = PathBuf::from(skills_dir_str);
 
         // Create directory if it doesn't exist
-        if !skills_dir.exists() {
-            if let Err(e) = std::fs::create_dir_all(&skills_dir) {
-                errors.push((name.clone(), format!("Failed to create directory: {}", e)));
-                continue;
-            }
+        if !skills_dir.exists()
+            && let Err(e) = std::fs::create_dir_all(&skills_dir)
+        {
+            errors.push((name.clone(), format!("Failed to create directory: {}", e)));
+            continue;
         }
 
         let link_path = skills_dir.join(skill_name);
@@ -1262,22 +1316,14 @@ fn create_skill_symlinks_for_all_integrations(
 
     // Report any errors
     for (name, error) in &errors {
-        eprintln!(
-            "  {} {}: {}",
-            style("!").yellow(),
-            name,
-            error
-        );
+        eprintln!("  {} {}: {}", style("!").yellow(), name, error);
     }
 
     Ok(success_count > 0)
 }
 
 /// Remove symlinks for a skill from all registered integrations
-pub fn remove_skill_symlinks_from_all_integrations(
-    skill_name: &str,
-    config: &Config,
-) {
+pub fn remove_skill_symlinks_from_all_integrations(skill_name: &str, config: &Config) {
     for (name, integration) in &config.integrations {
         // Skip integrations that don't have a skills directory
         let skills_dir_str = match &integration.skills_dir {
@@ -1287,15 +1333,15 @@ pub fn remove_skill_symlinks_from_all_integrations(
         let skills_dir = PathBuf::from(skills_dir_str);
         let link_path = skills_dir.join(skill_name);
 
-        if link_path.is_symlink() {
-            if let Err(e) = std::fs::remove_file(&link_path) {
-                eprintln!(
-                    "  {} {}: Failed to remove symlink: {}",
-                    style("!").yellow(),
-                    name,
-                    e
-                );
-            }
+        if link_path.is_symlink()
+            && let Err(e) = std::fs::remove_file(&link_path)
+        {
+            eprintln!(
+                "  {} {}: Failed to remove symlink: {}",
+                style("!").yellow(),
+                name,
+                e
+            );
         }
     }
 }
@@ -1331,10 +1377,10 @@ fn scan_for_skills(path: &Path) -> Result<Vec<String>> {
         if entry_path.is_dir() {
             // Check if it contains SKILL.md
             let skill_md = entry_path.join("SKILL.md");
-            if skill_md.exists() {
-                if let Some(skill_name) = entry_path.file_name() {
-                    skills.push(skill_name.to_string_lossy().to_string());
-                }
+            if skill_md.exists()
+                && let Some(skill_name) = entry_path.file_name()
+            {
+                skills.push(skill_name.to_string_lossy().to_string());
             }
         }
     }
@@ -1362,10 +1408,10 @@ fn scan_for_agents(path: &Path) -> Result<Vec<String>> {
         if entry_path.is_dir() {
             // Check if it contains AGENT.md
             let agent_md = entry_path.join("AGENT.md");
-            if agent_md.exists() {
-                if let Some(agent_name) = entry_path.file_name() {
-                    agents.push(agent_name.to_string_lossy().to_string());
-                }
+            if agent_md.exists()
+                && let Some(agent_name) = entry_path.file_name()
+            {
+                agents.push(agent_name.to_string_lossy().to_string());
             }
         }
     }
@@ -1420,9 +1466,7 @@ fn check_for_updates(repo_id: &str, config: &crate::config::state::Config) -> Re
 
     let default_branch = if let Ok(output) = branch_output {
         if output.status.success() {
-            String::from_utf8_lossy(&output.stdout)
-                .trim()
-                .to_string()
+            String::from_utf8_lossy(&output.stdout).trim().to_string()
         } else {
             "origin/main".to_string()
         }
@@ -1438,11 +1482,11 @@ fn check_for_updates(repo_id: &str, config: &crate::config::state::Config) -> Re
         .current_dir(&repo_cache_path)
         .output();
 
-    if let Ok(output) = remote_sha_output {
-        if output.status.success() {
-            let remote_sha = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            return Ok(Some(current_sha != &remote_sha));
-        }
+    if let Ok(output) = remote_sha_output
+        && output.status.success()
+    {
+        let remote_sha = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        return Ok(Some(current_sha != &remote_sha));
     }
 
     Ok(None)

@@ -17,19 +17,19 @@ pub struct Config {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Repository {
     pub url: String,
-    pub path: String,  // Subdirectory path within repo (empty for root)
+    pub path: String, // Subdirectory path within repo (empty for root)
     #[serde(default = "chrono_now")]
     pub cloned_at: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub current_sha: Option<String>,  // Current checked-out commit (12 chars)
+    pub current_sha: Option<String>, // Current checked-out commit (12 chars)
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub pinned_sha: Option<String>,   // If set, repo is pinned to this SHA
+    pub pinned_sha: Option<String>, // If set, repo is pinned to this SHA
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Skill {
-    pub repository: String,  // Repository ID (e.g., "github.com/owner/repo")
-    pub skill_path: String,  // Path within repo (e.g., "git-commit")
+    pub repository: String, // Repository ID (e.g., "github.com/owner/repo")
+    pub skill_path: String, // Path within repo (e.g., "git-commit")
     pub enabled: bool,
     #[serde(default = "chrono_now")]
     pub enabled_at: String,
@@ -39,8 +39,8 @@ pub struct Skill {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Agent {
-    pub repository: String,  // Repository ID (e.g., "github.com/owner/repo")
-    pub agent_path: String,  // Path within repo (e.g., "code-reviewer")
+    pub repository: String, // Repository ID (e.g., "github.com/owner/repo")
+    pub agent_path: String, // Path within repo (e.g., "code-reviewer")
     pub enabled: bool,
     #[serde(default = "chrono_now")]
     pub enabled_at: String,
@@ -88,7 +88,14 @@ impl Config {
     }
 
     /// Add a repository
-    pub fn add_repository(&mut self, repo_id: String, url: String, path: String, current_sha: Option<String>, pinned_sha: Option<String>) {
+    pub fn add_repository(
+        &mut self,
+        repo_id: String,
+        url: String,
+        path: String,
+        current_sha: Option<String>,
+        pinned_sha: Option<String>,
+    ) {
         self.repositories.insert(
             repo_id,
             Repository {
@@ -238,7 +245,12 @@ impl Config {
     }
 
     /// Add an integration
-    pub fn add_integration(&mut self, name: String, skills_dir: Option<String>, agents_dir: Option<String>) {
+    pub fn add_integration(
+        &mut self,
+        name: String,
+        skills_dir: Option<String>,
+        agents_dir: Option<String>,
+    ) {
         self.integrations.insert(
             name,
             Integration {
@@ -285,11 +297,11 @@ impl Config {
             };
 
             // Check if this integration exists in config but is missing agents_dir
-            if let Some(integration) = self.integrations.get_mut(bi.name) {
-                if integration.agents_dir.is_none() {
-                    integration.agents_dir = Some(default_agents_dir.to_string());
-                    changed = true;
-                }
+            if let Some(integration) = self.integrations.get_mut(bi.name)
+                && integration.agents_dir.is_none()
+            {
+                integration.agents_dir = Some(default_agents_dir.to_string());
+                changed = true;
             }
         }
 
@@ -458,8 +470,14 @@ mod tests {
         let parsed: Config = Config::from_toml(&toml_str).unwrap();
 
         let integration = parsed.integrations.get("claude-code").unwrap();
-        assert_eq!(integration.skills_dir, Some("/home/user/.claude/skills".to_string()));
-        assert_eq!(integration.agents_dir, Some("/home/user/.claude/agents".to_string()));
+        assert_eq!(
+            integration.skills_dir,
+            Some("/home/user/.claude/skills".to_string())
+        );
+        assert_eq!(
+            integration.agents_dir,
+            Some("/home/user/.claude/agents".to_string())
+        );
     }
 
     #[test]
@@ -468,14 +486,17 @@ mod tests {
         config.add_integration(
             "codex".to_string(),
             Some("/home/user/.codex/skills".to_string()),
-            None,  // codex doesn't support agents
+            None, // codex doesn't support agents
         );
 
         let toml_str = config.to_toml().unwrap();
         let parsed: Config = Config::from_toml(&toml_str).unwrap();
 
         let integration = parsed.integrations.get("codex").unwrap();
-        assert_eq!(integration.skills_dir, Some("/home/user/.codex/skills".to_string()));
+        assert_eq!(
+            integration.skills_dir,
+            Some("/home/user/.codex/skills".to_string())
+        );
         assert!(integration.agents_dir.is_none());
     }
 
@@ -490,7 +511,10 @@ enabled_at = "2024-01-01T00:00:00Z"
         let config = Config::from_toml(toml_str).unwrap();
 
         let integration = config.integrations.get("claude-code").unwrap();
-        assert_eq!(integration.skills_dir, Some("/home/user/.claude/skills".to_string()));
+        assert_eq!(
+            integration.skills_dir,
+            Some("/home/user/.claude/skills".to_string())
+        );
         // agents_dir should be None since it wasn't in the old format
         assert!(integration.agents_dir.is_none());
     }
@@ -510,7 +534,10 @@ enabled_at = "2024-01-01T00:00:00Z"
 
         let integration = parsed.integrations.get("agents-only").unwrap();
         assert!(integration.skills_dir.is_none());
-        assert_eq!(integration.agents_dir, Some("/home/user/.agents".to_string()));
+        assert_eq!(
+            integration.agents_dir,
+            Some("/home/user/.agents".to_string())
+        );
     }
 
     #[test]
@@ -543,7 +570,7 @@ enabled_at = "2024-01-01T00:00:00Z"
         config.add_integration(
             "claude-code".to_string(),
             Some("/custom/skills".to_string()),
-            Some("/custom/agents".to_string()),  // Custom agents path
+            Some("/custom/agents".to_string()), // Custom agents path
         );
 
         // Run migration
@@ -581,7 +608,7 @@ enabled_at = "2024-01-01T00:00:00Z"
         config.add_integration(
             "my-custom".to_string(),
             Some("/custom/skills".to_string()),
-            None,  // No agents_dir
+            None, // No agents_dir
         );
 
         // Run migration

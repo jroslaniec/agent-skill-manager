@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to coding agents when working with code in this repository.
 
 ## Build & Run Commands
 
@@ -11,6 +11,17 @@ cargo install --path .         # Install binary locally as 'sm'
 cargo test                     # Run all tests
 cargo test skill_ref           # Run specific test module
 ```
+
+## Linting
+
+**Before committing**, run these checks (CI will enforce them):
+
+```bash
+cargo fmt --check              # Check formatting
+cargo clippy -- -D warnings    # Lint with warnings as errors
+```
+
+To auto-fix formatting issues: `cargo fmt`
 
 ## Architecture Overview
 

@@ -273,11 +273,8 @@ mod tests {
         let target_path = target_dir.path().join("cloned-repo");
 
         // Clone from local path
-        clone_repo(
-            source_path.to_str().unwrap(),
-            &target_path,
-        )
-        .expect("Failed to clone from local path");
+        clone_repo(source_path.to_str().unwrap(), &target_path)
+            .expect("Failed to clone from local path");
 
         // Verify clone succeeded
         assert!(target_path.exists());
@@ -290,7 +287,10 @@ mod tests {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
         let target_path = temp_dir.path().join("should-not-exist");
 
-        let result = clone_repo("https://invalid.example.com/nonexistent/repo.git", &target_path);
+        let result = clone_repo(
+            "https://invalid.example.com/nonexistent/repo.git",
+            &target_path,
+        );
 
         assert!(result.is_err());
         let error = result.unwrap_err().to_string();

@@ -1,4 +1,4 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use console::style;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -29,10 +29,8 @@ pub fn add(urls: &[String]) -> Result<()> {
     }
 
     // Show summary
-    if urls.len() > 1 {
-        if had_errors {
-            eprintln!("Added {}/{} repositories", success_count, urls.len());
-        }
+    if urls.len() > 1 && had_errors {
+        eprintln!("Added {}/{} repositories", success_count, urls.len());
     }
 
     if had_errors {
@@ -58,10 +56,15 @@ fn add_single(lock: &ConfigLock, url: &str) -> Result<()> {
     // Only check for remote repos - local paths are always unique
     if repo_ref.source_type != crate::skill_ref::GitSourceType::Local {
         // Extract the base repo (without subpath) for conflict checking
-        let base_repo_id = repo_ref.repo_id.split('/').take(3).collect::<Vec<_>>().join("/");
-        for (existing_repo_id, _) in &config.repositories {
-            if existing_repo_id.starts_with(&base_repo_id)
-                && existing_repo_id != &repo_ref.repo_id {
+        let base_repo_id = repo_ref
+            .repo_id
+            .split('/')
+            .take(3)
+            .collect::<Vec<_>>()
+            .join("/");
+        for existing_repo_id in config.repositories.keys() {
+            if existing_repo_id.starts_with(&base_repo_id) && existing_repo_id != &repo_ref.repo_id
+            {
                 bail!(
                     "Cannot add {}. A different path from the same git repository is already registered: {}\nOnly one skill repository per git repository is allowed.",
                     repo_ref.repo_id,
@@ -76,23 +79,21 @@ fn add_single(lock: &ConfigLock, url: &str) -> Result<()> {
 
     // Clone the repository if not already cloned
     if !repo_cache_path.exists() {
-        println!(
-            "Cloning repository {}...",
-            style(&repo_ref.repo_id).cyan()
-        );
+        println!("Cloning repository {}...", style(&repo_ref.repo_id).cyan());
         git::clone_repo(repo_ref.clone_url(), &repo_cache_path)?;
     }
 
     // Handle SHA pinning if specified
     let (current_sha, pinned_sha) = if let Some(sha) = &repo_ref.sha {
         // Checkout the specific SHA
-        println!(
-            "Checking out commit {}...",
-            style(sha).yellow()
-        );
+        println!("Checking out commit {}...", style(sha).yellow());
         git::checkout_sha(&repo_cache_path, sha)?;
         let actual_sha = git::get_current_sha(&repo_cache_path)?;
-        println!("{} Pinned to {}", style("✓").green(), style(&actual_sha).cyan());
+        println!(
+            "{} Pinned to {}",
+            style("✓").green(),
+            style(&actual_sha).cyan()
+        );
         (Some(actual_sha.clone()), Some(actual_sha))
     } else {
         // No SHA specified, just get current SHA
@@ -139,11 +140,7 @@ fn add_single(lock: &ConfigLock, url: &str) -> Result<()> {
 
             // Only add if not already registered
             if !config.has_skill(skill_name) {
-                config.add_skill(
-                    skill_name.clone(),
-                    repo_ref.repo_id.clone(),
-                    skill_path,
-                );
+                config.add_skill(skill_name.clone(), repo_ref.repo_id.clone(), skill_path);
                 // Immediately disable it (add_skill enables by default)
                 config.disable_skill(skill_name).ok();
             }
@@ -159,11 +156,7 @@ fn add_single(lock: &ConfigLock, url: &str) -> Result<()> {
 
             // Only add if not already registered
             if !config.has_agent(agent_name) {
-                config.add_agent(
-                    agent_name.clone(),
-                    repo_ref.repo_id.clone(),
-                    agent_path,
-                );
+                config.add_agent(agent_name.clone(), repo_ref.repo_id.clone(), agent_path);
                 // Immediately disable it (add_agent enables by default)
                 config.disable_agent(agent_name).ok();
             }
@@ -284,27 +277,25 @@ fn delete_single(lock: &ConfigLock, url: &str, force: bool) -> Result<()> {
     // Collect skill names for this repository
     let skill_names: Vec<String> = skills
         .iter()
-        .map(|s| {
+        .filter_map(|s| {
             config
                 .skills
                 .iter()
                 .find(|(_, skill)| *skill == *s)
                 .map(|(name, _)| name.clone())
         })
-        .flatten()
         .collect();
 
     // Collect agent names for this repository
     let agent_names: Vec<String> = agents
         .iter()
-        .map(|a| {
+        .filter_map(|a| {
             config
                 .agents
                 .iter()
                 .find(|(_, agent)| *agent == *a)
                 .map(|(name, _)| name.clone())
         })
-        .flatten()
         .collect();
 
     // Remove skill symlinks from all integrations
@@ -545,7 +536,7 @@ fn reconcile_skills(
             removed_skills.push(skill_name.clone());
 
             // Remove symlinks from all integrations
-            for (_int_name, integration) in &config.integrations {
+            for integration in config.integrations.values() {
                 if let Some(ref skills_dir_str) = integration.skills_dir {
                     let skills_dir = PathBuf::from(skills_dir_str);
                     let link_path = skills_dir.join(skill_name);
@@ -572,11 +563,7 @@ fn reconcile_skills(
                 format!("{}/{}", repo_path, skill_name)
             };
 
-            config.add_skill(
-                skill_name.clone(),
-                repo_id.to_string(),
-                skill_path,
-            );
+            config.add_skill(skill_name.clone(), repo_id.to_string(), skill_path);
             config.disable_skill(skill_name).ok();
         }
     }
@@ -613,7 +600,7 @@ fn reconcile_agents(
             removed_agents.push(agent_name.clone());
 
             // Remove symlinks from all integrations
-            for (_int_name, integration) in &config.integrations {
+            for integration in config.integrations.values() {
                 if let Some(ref agents_dir_str) = integration.agents_dir {
                     let agents_dir = PathBuf::from(agents_dir_str);
                     let link_path = agents_dir.join(format!("{}.md", agent_name));
@@ -640,11 +627,7 @@ fn reconcile_agents(
                 format!("{}/{}", repo_path, agent_name)
             };
 
-            config.add_agent(
-                agent_name.clone(),
-                repo_id.to_string(),
-                agent_path,
-            );
+            config.add_agent(agent_name.clone(), repo_id.to_string(), agent_path);
             config.disable_agent(agent_name).ok();
         }
     }
@@ -705,12 +688,14 @@ fn upgrade_with_lock(repo_ref: &RepoRef, lock: &ConfigLock) -> Result<()> {
             }
 
             // Reconcile skills - handle deleted and new skills
-            let (rs, as_) = reconcile_skills(config, &repo_ref.repo_id, &new_skills, &repo_ref.path)?;
+            let (rs, as_) =
+                reconcile_skills(config, &repo_ref.repo_id, &new_skills, &repo_ref.path)?;
             removed_skills = rs;
             added_skills = as_;
 
             // Reconcile agents - handle deleted and new agents
-            let (ra, aa) = reconcile_agents(config, &repo_ref.repo_id, &new_agents, &repo_ref.path)?;
+            let (ra, aa) =
+                reconcile_agents(config, &repo_ref.repo_id, &new_agents, &repo_ref.path)?;
             removed_agents = ra;
             added_agents = aa;
 
@@ -725,27 +710,27 @@ fn upgrade_with_lock(repo_ref: &RepoRef, lock: &ConfigLock) -> Result<()> {
         );
 
         // Combine removed items for display
-        let all_removed: Vec<_> = removed_skills.iter()
+        let all_removed: Vec<_> = removed_skills
+            .iter()
             .map(|s| format!("[skill] {}", s))
             .chain(removed_agents.iter().map(|a| format!("[agent] {}", a)))
             .collect();
         if !all_removed.is_empty() {
-            println!("{} Removed: {} (no longer available)",
+            println!(
+                "{} Removed: {} (no longer available)",
                 style("⚠").yellow(),
                 all_removed.join(", ")
             );
         }
 
         // Combine added items for display
-        let all_added: Vec<_> = added_skills.iter()
+        let all_added: Vec<_> = added_skills
+            .iter()
             .map(|s| format!("[skill] {}", s))
             .chain(added_agents.iter().map(|a| format!("[agent] {}", a)))
             .collect();
         if !all_added.is_empty() {
-            println!("{} New: {}",
-                style("✓").green(),
-                all_added.join(", ")
-            );
+            println!("{} New: {}", style("✓").green(), all_added.join(", "));
         }
     } else {
         // Mode A: Upgrade to latest
@@ -758,12 +743,12 @@ fn upgrade_with_lock(repo_ref: &RepoRef, lock: &ConfigLock) -> Result<()> {
             );
         }
 
-        let old_sha = repo.current_sha.clone().unwrap_or_else(|| "unknown".to_string());
+        let old_sha = repo
+            .current_sha
+            .clone()
+            .unwrap_or_else(|| "unknown".to_string());
 
-        println!(
-            "Upgrading {}...",
-            style(&repo_ref.repo_id).cyan()
-        );
+        println!("Upgrading {}...", style(&repo_ref.repo_id).cyan());
 
         let new_sha = git::pull_to_latest(&repo_cache_path)?;
 
@@ -797,12 +782,14 @@ fn upgrade_with_lock(repo_ref: &RepoRef, lock: &ConfigLock) -> Result<()> {
             }
 
             // Reconcile skills - handle deleted and new skills
-            let (rs, as_) = reconcile_skills(config, &repo_ref.repo_id, &new_skills, &repo_ref.path)?;
+            let (rs, as_) =
+                reconcile_skills(config, &repo_ref.repo_id, &new_skills, &repo_ref.path)?;
             removed_skills = rs;
             added_skills = as_;
 
             // Reconcile agents - handle deleted and new agents
-            let (ra, aa) = reconcile_agents(config, &repo_ref.repo_id, &new_agents, &repo_ref.path)?;
+            let (ra, aa) =
+                reconcile_agents(config, &repo_ref.repo_id, &new_agents, &repo_ref.path)?;
             removed_agents = ra;
             added_agents = aa;
 
@@ -818,27 +805,27 @@ fn upgrade_with_lock(repo_ref: &RepoRef, lock: &ConfigLock) -> Result<()> {
         );
 
         // Combine removed items for display
-        let all_removed: Vec<_> = removed_skills.iter()
+        let all_removed: Vec<_> = removed_skills
+            .iter()
             .map(|s| format!("[skill] {}", s))
             .chain(removed_agents.iter().map(|a| format!("[agent] {}", a)))
             .collect();
         if !all_removed.is_empty() {
-            println!("{} Removed: {} (no longer available)",
+            println!(
+                "{} Removed: {} (no longer available)",
                 style("⚠").yellow(),
                 all_removed.join(", ")
             );
         }
 
         // Combine added items for display
-        let all_added: Vec<_> = added_skills.iter()
+        let all_added: Vec<_> = added_skills
+            .iter()
             .map(|s| format!("[skill] {}", s))
             .chain(added_agents.iter().map(|a| format!("[agent] {}", a)))
             .collect();
         if !all_added.is_empty() {
-            println!("{} New: {}",
-                style("✓").green(),
-                all_added.join(", ")
-            );
+            println!("{} New: {}", style("✓").green(), all_added.join(", "));
         }
     }
 
@@ -933,10 +920,10 @@ fn scan_for_skills(path: &Path) -> Result<Vec<String>> {
         if entry_path.is_dir() {
             // Check if it contains SKILL.md
             let skill_md = entry_path.join("SKILL.md");
-            if skill_md.exists() {
-                if let Some(skill_name) = entry_path.file_name() {
-                    skills.push(skill_name.to_string_lossy().to_string());
-                }
+            if skill_md.exists()
+                && let Some(skill_name) = entry_path.file_name()
+            {
+                skills.push(skill_name.to_string_lossy().to_string());
             }
         }
     }
@@ -964,10 +951,10 @@ fn scan_for_agents(path: &Path) -> Result<Vec<String>> {
         if entry_path.is_dir() {
             // Check if it contains AGENT.md
             let agent_md = entry_path.join("AGENT.md");
-            if agent_md.exists() {
-                if let Some(agent_name) = entry_path.file_name() {
-                    agents.push(agent_name.to_string_lossy().to_string());
-                }
+            if agent_md.exists()
+                && let Some(agent_name) = entry_path.file_name()
+            {
+                agents.push(agent_name.to_string_lossy().to_string());
             }
         }
     }
@@ -1134,8 +1121,14 @@ mod tests {
 
     #[test]
     fn test_url_to_source_type_https() {
-        assert_eq!(url_to_source_type("https://github.com/owner/repo.git"), "https");
-        assert_eq!(url_to_source_type("https://gitlab.com/team/project.git"), "https");
+        assert_eq!(
+            url_to_source_type("https://github.com/owner/repo.git"),
+            "https"
+        );
+        assert_eq!(
+            url_to_source_type("https://gitlab.com/team/project.git"),
+            "https"
+        );
         assert_eq!(url_to_source_type("http://example.com/repo.git"), "https");
     }
 
@@ -1143,7 +1136,10 @@ mod tests {
     fn test_url_to_source_type_ssh() {
         assert_eq!(url_to_source_type("git@github.com:owner/repo.git"), "ssh");
         assert_eq!(url_to_source_type("git@gitlab.com:team/project.git"), "ssh");
-        assert_eq!(url_to_source_type("git@bitbucket.org:owner/repo.git"), "ssh");
+        assert_eq!(
+            url_to_source_type("git@bitbucket.org:owner/repo.git"),
+            "ssh"
+        );
     }
 
     #[test]

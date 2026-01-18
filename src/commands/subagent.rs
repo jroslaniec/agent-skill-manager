@@ -1,10 +1,10 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use console::style;
 use std::os::unix::fs as unix_fs;
 use std::path::PathBuf;
 
-use crate::config::state::Config;
 use crate::config::ConfigLock;
+use crate::config::state::Config;
 use crate::paths;
 use crate::skill_ref::RepoRef;
 
@@ -45,14 +45,13 @@ pub fn enable_with_lock(lock: &ConfigLock, agent_names_or_refs: &[String]) -> Re
             // Get the source path to the AGENT.md file (resolve handles legacy paths)
             let repo_ref = RepoRef::parse(&agent_info.repository)?;
             let repo_cache_path = paths::resolve_repo_cache_path(&repo_ref)?;
-            let source_path = repo_cache_path.join(&agent_info.agent_path).join("AGENT.md");
+            let source_path = repo_cache_path
+                .join(&agent_info.agent_path)
+                .join("AGENT.md");
 
             create_agent_symlinks_for_all_integrations(&source_path, agent_name_or_ref, &config)?;
 
-            println!(
-                "Enabled agent {}",
-                style(agent_name_or_ref).cyan()
-            );
+            println!("Enabled agent {}", style(agent_name_or_ref).cyan());
             continue;
         }
 
@@ -98,10 +97,7 @@ pub fn disable_with_lock(lock: &ConfigLock, agent_names_or_refs: &[String]) -> R
         // Update config
         lock.update(|config| config.disable_agent(agent_name_or_ref))?;
 
-        println!(
-            "Disabled agent {}",
-            style(agent_name_or_ref).cyan()
-        );
+        println!("Disabled agent {}", style(agent_name_or_ref).cyan());
     }
 
     Ok(())
@@ -118,10 +114,11 @@ pub fn list(all: bool, status: Option<&str>, name_only: bool) -> Result<()> {
     }
 
     // Validate status filter if provided
-    if let Some(s) = status {
-        if s != "enabled" && s != "disabled" {
-            bail!("Invalid status '{}'. Use 'enabled' or 'disabled'.", s);
-        }
+    if let Some(s) = status
+        && s != "enabled"
+        && s != "disabled"
+    {
+        bail!("Invalid status '{}'. Use 'enabled' or 'disabled'.", s);
     }
 
     // Collect and sort agents by name
@@ -152,14 +149,17 @@ pub fn list(all: bool, status: Option<&str>, name_only: bool) -> Result<()> {
         .collect();
 
     if filtered_agents.is_empty() {
-        if status.is_some() {
-            println!("No {} subagents found.", status.unwrap());
+        if let Some(s) = status {
+            println!("No {} subagents found.", s);
         } else if all {
             println!("No subagents found.");
         } else {
             println!("No enabled subagents found.");
             println!();
-            println!("{}", style("To see all subagents use: sm subagents list --all").dim());
+            println!(
+                "{}",
+                style("To see all subagents use: sm subagents list --all").dim()
+            );
         }
         return Ok(());
     }
@@ -226,8 +226,7 @@ fn create_agent_symlink(source: &PathBuf, link: &PathBuf) -> Result<()> {
         }
     }
 
-    unix_fs::symlink(source, link)
-        .context("Failed to create symlink")?;
+    unix_fs::symlink(source, link).context("Failed to create symlink")?;
 
     Ok(())
 }
@@ -262,11 +261,11 @@ fn create_agent_symlinks_for_all_integrations(
         let agents_dir = paths::expand_tilde(agents_dir_str)?;
 
         // Create directory if it doesn't exist
-        if !agents_dir.exists() {
-            if let Err(e) = std::fs::create_dir_all(&agents_dir) {
-                errors.push((name.clone(), format!("Failed to create directory: {}", e)));
-                continue;
-            }
+        if !agents_dir.exists()
+            && let Err(e) = std::fs::create_dir_all(&agents_dir)
+        {
+            errors.push((name.clone(), format!("Failed to create directory: {}", e)));
+            continue;
         }
 
         // Agent symlinks use .md extension: {agents_dir}/{name}.md
@@ -279,22 +278,14 @@ fn create_agent_symlinks_for_all_integrations(
 
     // Report any errors
     for (name, error) in &errors {
-        eprintln!(
-            "  {} {}: {}",
-            style("!").yellow(),
-            name,
-            error
-        );
+        eprintln!("  {} {}: {}", style("!").yellow(), name, error);
     }
 
     Ok(success_count > 0)
 }
 
 /// Remove symlinks for an agent from all registered integrations
-pub fn remove_agent_symlinks_from_all_integrations(
-    agent_name: &str,
-    config: &Config,
-) {
+pub fn remove_agent_symlinks_from_all_integrations(agent_name: &str, config: &Config) {
     for (name, integration) in &config.integrations {
         // Skip integrations that don't have an agents directory
         let agents_dir_str = match &integration.agents_dir {
@@ -311,15 +302,15 @@ pub fn remove_agent_symlinks_from_all_integrations(
         // Agent symlinks use .md extension: {agents_dir}/{name}.md
         let link_path = agents_dir.join(format!("{}.md", agent_name));
 
-        if link_path.is_symlink() {
-            if let Err(e) = std::fs::remove_file(&link_path) {
-                eprintln!(
-                    "  {} {}: Failed to remove symlink: {}",
-                    style("!").yellow(),
-                    name,
-                    e
-                );
-            }
+        if link_path.is_symlink()
+            && let Err(e) = std::fs::remove_file(&link_path)
+        {
+            eprintln!(
+                "  {} {}: Failed to remove symlink: {}",
+                style("!").yellow(),
+                name,
+                e
+            );
         }
     }
 }
