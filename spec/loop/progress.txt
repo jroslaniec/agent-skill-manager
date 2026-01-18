@@ -233,3 +233,27 @@
   - Error messages should suggest alternative approaches (like using interactive mode) instead of assuming specific formats
 
 ---
+
+## 2026-01-18 - US-001: Multi-repo add command
+
+- What was implemented:
+  - Changed CLI `RepoAction::Add` from single `url: String` to multiple `urls: Vec<String>`
+  - Created `add_single()` helper function to handle adding a single repository
+  - Updated `add()` function to iterate through all provided URLs and call `add_single()` for each
+  - Implemented error handling: continues processing remaining repos if one fails, prints errors to stderr
+  - Added exit code handling: exits with code 1 if any operation failed
+  - Added summary message when multiple repos are processed
+
+- Files changed:
+  - src/cli.rs - Changed Add argument from single url to urls: Vec<String>
+  - src/main.rs - Updated handler to pass the vector to add()
+  - src/commands/repo.rs - Refactored add() to handle multiple repos, extracted add_single() helper
+
+- **Learnings for future iterations:**
+  - Multi-argument commands should use Vec<T> in CLI args
+  - When one operation in a batch fails, continue with others (fault-tolerant behavior)
+  - Print errors to stderr and normal output to stdout
+  - Exit with error code if any operation in batch fails
+  - Helper functions like add_single() keep the logic clean and maintainable
+
+---
