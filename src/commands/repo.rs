@@ -250,25 +250,32 @@ pub fn list() -> Result<()> {
 
     // Print header
     println!(
-        "{:<40}  {:>6}  {:>7}  {:>8}  {:<10}  {:<10}",
+        "{:<40}  {:>10}  {:>10}  {:<10}  {:<10}",
         style("REPOSITORY").bold(),
-        style("TOTAL").bold(),
-        style("ENABLED").bold(),
-        style("DISABLED").bold(),
+        style("SKILLS").bold(),
+        style("AGENTS").bold(),
         style("CURRENT").bold(),
         style("PIN").bold()
     );
 
     // Print separator
-    println!("{}", "-".repeat(100));
+    println!("{}", "-".repeat(90));
 
     // Print each repository
     for (repo_id, repo) in &config.repositories {
         // Get all skills for this repository
         let skills = config.skills_for_repo(repo_id);
-        let total_count = skills.len();
-        let enabled_count = skills.iter().filter(|s| s.enabled).count();
-        let disabled_count = skills.iter().filter(|s| !s.enabled).count();
+        let skills_total = skills.len();
+        let skills_enabled = skills.iter().filter(|s| s.enabled).count();
+
+        // Get all agents for this repository
+        let agents = config.agents_for_repo(repo_id);
+        let agents_total = agents.len();
+        let agents_enabled = agents.iter().filter(|a| a.enabled).count();
+
+        // Format as "enabled/total" ratio
+        let skills_display = format!("{}/{}", skills_enabled, skills_total);
+        let agents_display = format!("{}/{}", agents_enabled, agents_total);
 
         let current_sha_display = repo
             .current_sha
@@ -289,11 +296,10 @@ pub fn list() -> Result<()> {
             .unwrap_or_else(|| "-".to_string());
 
         println!(
-            "{:<40}  {:>6}  {:>7}  {:>8}  {:<10}  {}",
+            "{:<40}  {:>10}  {:>10}  {:<10}  {}",
             style(repo_id).cyan(),
-            total_count,
-            style(enabled_count).green(),
-            style(disabled_count).dim(),
+            style(&skills_display).green(),
+            style(&agents_display).blue(),
             style(&current_sha_display).dim(),
             pinned_sha_display
         );

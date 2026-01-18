@@ -351,8 +351,8 @@
         "cargo test passes"
       ],
       "priority": 23,
-      "passes": false,
-      "notes": "BUG: Severity low. Repro: Run 'sm repo ls' - shows TOTAL, ENABLED, DISABLED without clarifying they're skill counts, no agent counts shown. Root cause: list() in repo.rs only counts skills, headers don't clarify. Affected: src/commands/repo.rs"
+      "passes": true,
+      "notes": "Implemented: Updated list() in repo.rs to show SKILLS and AGENTS columns with enabled/total ratio format. Removed TOTAL, ENABLED, DISABLED columns. 89 tests pass."
     },
     {
       "id": "US-024",
