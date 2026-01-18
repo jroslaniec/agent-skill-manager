@@ -26,21 +26,24 @@ impl SkillRef {
     /// - github.com/owner/repo/skill-dir
     /// - github.com/owner/repo/skill-dir/SKILL.md
     /// - github.com/owner/repo/nested/path/skill-dir
+    ///
+    /// Note: This is a legacy format for GitHub references only.
+    /// For universal git support, use RepoRef::parse() and the interactive flow.
     pub fn parse(reference: &str) -> Result<Self> {
         let reference = reference.trim();
 
-        // Remove github.com prefix if present
+        // Remove github.com prefix if present (legacy GitHub-only format)
         let reference = reference
             .strip_prefix("https://github.com/")
             .or_else(|| reference.strip_prefix("http://github.com/"))
             .or_else(|| reference.strip_prefix("github.com/"))
-            .context("Skill reference must start with github.com/")?;
+            .context("Not a valid GitHub skill reference. For other git sources, use 'sm add -i <url>' or 'sm repo add <url>'")?;
 
         // Split into parts
         let parts: Vec<&str> = reference.split('/').collect();
 
         if parts.len() < 3 {
-            bail!("Invalid skill reference: must be github.com/OWNER/REPO/PATH");
+            bail!("Invalid skill reference: must include a skill path (e.g., github.com/OWNER/REPO/SKILL)");
         }
 
         let owner = parts[0].to_string();

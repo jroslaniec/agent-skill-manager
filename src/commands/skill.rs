@@ -25,8 +25,34 @@ pub fn add(skill_refs: &[String], interactive: bool) -> Result<()> {
     for skill_ref in skill_refs {
         match SkillRef::parse(skill_ref) {
             Ok(skill) => skills.push(skill),
-            Err(e) => {
-                eprintln!("Error: {}", e);
+            Err(_) => {
+                // SkillRef::parse failed - check if this is a valid repository URL
+                // If so, provide a helpful error message suggesting -i flag or sm repo add
+                if let Ok(repo_ref) = RepoRef::parse(skill_ref) {
+                    // It's a valid repository URL but not a skill reference
+                    eprintln!(
+                        "Error: '{}' looks like a repository URL, not a skill reference.",
+                        skill_ref
+                    );
+                    eprintln!();
+                    eprintln!("To add a repository and select skills interactively, use:");
+                    eprintln!("  sm add -i {}", skill_ref);
+                    eprintln!();
+                    eprintln!("Or add the repository first, then enable skills:");
+                    eprintln!("  sm repo add {}", repo_ref.repo_id);
+                    eprintln!("  sm skills enable <skill-name>");
+                } else {
+                    // Neither a valid skill reference nor a valid repo URL
+                    eprintln!(
+                        "Error: '{}' is not a valid skill reference.",
+                        skill_ref
+                    );
+                    eprintln!();
+                    eprintln!("Skill references should include the skill path, e.g.:");
+                    eprintln!("  github.com/owner/repo/skill-name");
+                    eprintln!("  gitlab.com/owner/repo/skill-name");
+                    eprintln!("  git@github.com:owner/repo.git/skill-name");
+                }
                 std::process::exit(1);
             }
         }

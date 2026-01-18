@@ -10,6 +10,12 @@
   - Local filesystem paths (absolute, relative, ~-prefixed)
   - Tag and commit references with `@tag` or `@sha` suffix
 
+### Fixed
+
+- Improved error messages for `sm add` when given repository URLs instead of skill references
+  - Now suggests `sm add -i <url>` for interactive mode
+  - Suggests `sm repo add` then `sm skills enable` as alternative
+
 ## Version 0.0.3 (2026-01-16)
 
 - **Multi-integration support** - Skills can now be enabled for multiple coding agents simultaneously

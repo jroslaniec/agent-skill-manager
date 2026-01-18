@@ -6,15 +6,14 @@
     {
       "id": "US-000",
       "title": "Replace live data in unit tests with mock data",
-      "description": "As a developer, I want unit tests to use mock/placeholder data instead of real usernames and repository URLs so that tests don't reference live external data",
-      "acceptanceCriteria": [
+      "description": "As a developer, I want unit tests to use mock/placeholder data instead of real usernames and repository URLs so that tests don't reference live external data", "acceptanceCriteria": [
         "All test URLs use placeholder domains/owners (e.g., example.com/testowner/testrepo)",
         "No real GitHub/GitLab usernames in test data (replace jroslaniec, j.roslaniec, anthropics, etc.)",
         "Test repositories section in PRD is for manual testing only, not unit tests",
         "cargo build passes",
         "cargo test passes"
       ],
-      "priority": 0,
+      "priority": 1,
       "passes": true,
       "notes": "Completed - replaced all real usernames and URLs with placeholder data (testowner, testteam, test.user, etc.)"
     },
@@ -210,8 +209,8 @@
         "cargo test passes"
       ],
       "priority": 13,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented --skills/-s and --agents/-a filters. Removed -a short flag from --all to avoid conflict."
     },
     {
       "id": "US-014",
@@ -224,8 +223,8 @@
         "cargo test passes"
       ],
       "priority": 14,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Removed Enable/Disable command variants from cli.rs and handlers from main.rs. 75 tests pass."
     },
     {
       "id": "US-015",
@@ -239,8 +238,8 @@
         "cargo test passes"
       ],
       "priority": 15,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented in commit 63c623d - manage() shows both skills and agents with type prefixes, uses appropriate enable/disable functions"
     },
     {
       "id": "US-016",
@@ -253,8 +252,8 @@
         "cargo test passes"
       ],
       "priority": 16,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented in commit 5fc8556 - added --agents-path flag, 75 tests pass"
     },
     {
       "id": "US-017",
@@ -267,8 +266,8 @@
         "cargo test passes"
       ],
       "priority": 17,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Already implemented in US-006 - list() function shows both SKILLS DIRECTORY and AGENTS DIRECTORY columns with proper handling of missing directories"
     },
     {
       "id": "US-018",
@@ -282,8 +281,134 @@
         "cargo test passes"
       ],
       "priority": 18,
+      "passes": true,
+      "notes": "Implemented 6 integration tests in src/lib.rs: test_integration_clone_local_path_to_cache, test_integration_skill_enable_creates_directory_symlink, test_integration_agent_enable_creates_file_symlink_with_md_extension, test_integration_skill_vs_agent_symlink_structure, test_integration_scan_discovers_both_skills_and_agents, test_integration_list_type_filters. 81 total tests pass."
+    },
+    {
+      "id": "US-019",
+      "title": "Fix sm add error message for non-GitHub URLs",
+      "description": "As a user, I want sm add to accept GitLab/Bitbucket URLs so that I can add repositories from any git source",
+      "acceptanceCriteria": [
+        "sm add accepts GitLab URLs without GitHub-specific error",
+        "Error messages reference universal git support, not just github.com",
+        "cargo build passes",
+        "cargo test passes"
+      ],
+      "priority": 19,
+      "passes": true,
+      "notes": "Fixed: Updated sm add to detect repository URLs and provide helpful error message suggesting 'sm add -i' or 'sm repo add'. Updated SkillRef::parse() error message to reference universal git support."
+    },
+    {
+      "id": "US-020",
+      "title": "Fix sm upgrade for repos cloned before universal git support",
+      "description": "As a user, I want sm upgrade to work for all my repos so that I can update repositories regardless of when they were added",
+      "acceptanceCriteria": [
+        "sm upgrade works for repos at legacy cache paths (git/{owner}/{repo})",
+        "Backward compatibility with pre-universal-git repos",
+        "cargo build passes",
+        "cargo test passes"
+      ],
+      "priority": 20,
       "passes": false,
-      "notes": ""
+      "notes": "BUG: Severity high. Repro: Have GitHub repo cloned before universal git support, run 'sm upgrade', confirm 'yes' - fails with 'Failed to execute git fetch command'. Root cause: Cache path changed from git/{owner}/{repo} to git/{host}/{owner}/{repo}. repo_cache_path() doesn't check legacy paths. Affected: src/paths.rs, src/commands/repo.rs"
+    },
+    {
+      "id": "US-021",
+      "title": "Fix agent symlinks not created in ~/.claude/agents/",
+      "description": "As a user, I want enabled agents to be symlinked so that they are available in my coding environment",
+      "acceptanceCriteria": [
+        "Enabling agent creates symlink in ~/.claude/agents/",
+        "Built-in integrations auto-populate agents_dir when missing",
+        "cargo build passes",
+        "cargo test passes"
+      ],
+      "priority": 21,
+      "passes": false,
+      "notes": "BUG: Severity high. Repro: Have integration added before agent support (config.toml only has skills_dir, no agents_dir), add repo with agents, enable agent - 'ls ~/.claude/agents/' shows empty despite agent 'enabled'. Root cause: Integration config missing agents_dir, subagent enable skips integrations without agents_dir. Affected: src/commands/integration.rs, src/config/state.rs"
+    },
+    {
+      "id": "US-022",
+      "title": "Fix interactive mode not showing skills from legacy cache paths",
+      "description": "As a user, I want interactive mode to show all my skills so that I can manage them regardless of when their repos were added",
+      "acceptanceCriteria": [
+        "Interactive mode shows all skills regardless of cache path structure",
+        "Skills from pre-universal-git repos appear in list",
+        "cargo build passes",
+        "cargo test passes"
+      ],
+      "priority": 22,
+      "passes": false,
+      "notes": "BUG: Severity medium. Repro: Have repo cloned before universal git support, run 'sm' - skills may not appear. Root cause: Same as US-020 - manage() uses repo_cache_path() generating new-style paths, but old repos at old-style paths. Affected: src/commands/skill.rs"
+    },
+    {
+      "id": "US-023",
+      "title": "Improve sm repo ls output with skill and agent counts",
+      "description": "As a user, I want sm repo ls to show clear skill and agent counts so that I understand what each repository contains",
+      "acceptanceCriteria": [
+        "sm repo ls shows separate SKILLS and AGENTS columns",
+        "Columns show ratio format like '4/6' (enabled/total)",
+        "cargo build passes",
+        "cargo test passes"
+      ],
+      "priority": 23,
+      "passes": false,
+      "notes": "BUG: Severity low. Repro: Run 'sm repo ls' - shows TOTAL, ENABLED, DISABLED without clarifying they're skill counts, no agent counts shown. Root cause: list() in repo.rs only counts skills, headers don't clarify. Affected: src/commands/repo.rs"
+    },
+    {
+      "id": "US-024",
+      "title": "Fix inconsistent -a flag behavior across commands",
+      "description": "As a user, I want -a to consistently mean --all so that CLI flags are predictable",
+      "acceptanceCriteria": [
+        "-a means --all consistently across all commands",
+        "Use different short flag for --agents filter (e.g., -g or -t)",
+        "cargo build passes",
+        "cargo test passes"
+      ],
+      "priority": 24,
+      "passes": false,
+      "notes": "BUG: Severity medium. Repro: 'sm list -a' shows only agents; 'sm skills list -a' shows all skills. Root cause: In cli.rs, 'sm list' has -a for --agents but no short for --all; 'sm skills list' has -a for --all. Affected: src/cli.rs"
+    },
+    {
+      "id": "US-025",
+      "title": "Fix broken symlinks when re-enabling skills",
+      "description": "As a user, I want re-enabled skills to work so that toggling skills doesn't break them",
+      "acceptanceCriteria": [
+        "Re-enabling skill creates working symlink to actual cache location",
+        "Symlinks point to correct path regardless of when repo was cloned",
+        "cargo build passes",
+        "cargo test passes"
+      ],
+      "priority": 25,
+      "passes": false,
+      "notes": "BUG: Severity critical. Repro: Have repo cloned before universal git, disable then enable skill - 'file ~/.claude/skills/git-commit' shows broken symlink. Root cause: Same as US-020/US-022. enable_with_lock() uses repo_cache_path() generating new-style paths. Affected: src/commands/skill.rs, src/paths.rs"
+    },
+    {
+      "id": "US-026",
+      "title": "Add git source type indicator to sm repo ls",
+      "description": "As a user, I want to see the git source type so that I know how each repository will be fetched",
+      "acceptanceCriteria": [
+        "sm repo ls shows source type indicator ([https], [ssh], [local])",
+        "Or shows actual URL used for git operations",
+        "cargo build passes",
+        "cargo test passes"
+      ],
+      "priority": 26,
+      "passes": false,
+      "notes": "BUG: Severity low. Repro: Add repos via HTTPS, SSH, local path, run 'sm repo ls' - no source type shown. Root cause: list() in repo.rs only displays repo_id, counts, SHA. Source type available in RepoRef.source_type but not displayed. Affected: src/commands/repo.rs"
+    },
+    {
+      "id": "US-027",
+      "title": "Fix sm list --skills --agents showing no results",
+      "description": "As a user, I want combined filters to work so that I can view both skills and agents when requested",
+      "acceptanceCriteria": [
+        "sm list --skills --agents shows both (same as no filter)",
+        "Or throw error saying flags are mutually exclusive",
+        "cargo build passes",
+        "cargo test passes"
+      ],
+      "priority": 27,
+      "passes": false,
+      "notes": "BUG: Severity low. Repro: Have skills and agents enabled, run 'sm list --skills --agents' - shows 'No enabled skills found' instead of both. Root cause: In list_combined() logic: 'if !agents_only { add skills }' and 'if !skills_only { add agents }'. When both true, both conditions fail. Affected: src/commands/skill.rs"
     }
   ]
 }
