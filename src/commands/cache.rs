@@ -1,5 +1,5 @@
-use anyhow::Result;
 use crate::paths;
+use anyhow::Result;
 
 pub fn dir() -> Result<()> {
     let cache_dir = paths::cache_dir()?;

@@ -25,6 +25,13 @@ pub enum Command {
         action: SkillAction,
     },
 
+    /// Manage subagents
+    #[command(visible_aliases = ["subagent", "sb"])]
+    Subagents {
+        #[command(subcommand)]
+        action: SubagentAction,
+    },
+
     /// Cache utilities
     Cache {
         #[command(subcommand)]
@@ -41,32 +48,28 @@ pub enum Command {
         skill_refs: Vec<String>,
     },
 
-    /// Enable one or more skills (shortcut for 'skills enable')
-    Enable {
-        /// Skill names or references (e.g., "git-commit" or "github.com/owner/repo/git-commit")
-        skill_names_or_refs: Vec<String>,
-    },
-
-    /// Disable one or more skills (shortcut for 'skills disable')
-    Disable {
-        /// Skill names or references (e.g., "git-commit" or "github.com/owner/repo/git-commit")
-        skill_names_or_refs: Vec<String>,
-    },
-
-    /// List skills (shortcut for 'skills list')
+    /// List all items (skills and subagents)
     #[command(visible_aliases = ["ls"])]
     List {
-        /// Show all skills (enabled and disabled)
-        #[arg(short, long)]
+        /// Show all items (enabled and disabled)
+        #[arg(short = 'a', long)]
         all: bool,
 
         /// Filter by status (enabled or disabled)
         #[arg(long)]
         status: Option<String>,
 
-        /// Show only skill names (one per line)
+        /// Show only names (one per line)
         #[arg(long)]
         name_only: bool,
+
+        /// Show only skills
+        #[arg(short = 's', long)]
+        skills: bool,
+
+        /// Show only agents
+        #[arg(short = 'g', long)]
+        agents: bool,
     },
 
     /// Purge all repositories and skills (full reset)
@@ -97,17 +100,17 @@ pub enum Command {
 
 #[derive(Debug, Subcommand)]
 pub enum RepoAction {
-    /// Add a repository
+    /// Add one or more repositories
     Add {
-        /// Repository URL (e.g., github.com/owner/repo or github.com/owner/repo/path)
-        url: String,
+        /// Repository URLs (e.g., github.com/owner/repo, gitlab.com/owner/repo, or /local/path)
+        urls: Vec<String>,
     },
 
-    /// Delete a repository
+    /// Delete one or more repositories
     #[command(visible_aliases = ["remove", "rm", "del"])]
     Delete {
-        /// Repository URL to delete
-        url: String,
+        /// Repository URLs to delete
+        urls: Vec<String>,
 
         /// Force deletion without confirmation
         #[arg(short, long)]
@@ -141,13 +144,13 @@ pub enum RepoAction {
 pub enum SkillAction {
     /// Enable one or more skills
     Enable {
-        /// Skill names or references (e.g., "git-commit" or "github.com/owner/repo/git-commit")
+        /// Skill names or references (e.g., "git-commit" or "owner/repo/git-commit")
         skill_names_or_refs: Vec<String>,
     },
 
     /// Disable one or more skills
     Disable {
-        /// Skill names or references (e.g., "git-commit" or "github.com/owner/repo/git-commit")
+        /// Skill names or references (e.g., "git-commit" or "owner/repo/git-commit")
         skill_names_or_refs: Vec<String>,
     },
 
@@ -175,6 +178,37 @@ pub enum CacheAction {
 }
 
 #[derive(Debug, Subcommand)]
+pub enum SubagentAction {
+    /// Enable one or more subagents
+    Enable {
+        /// Subagent names or references (e.g., "my-agent" or "owner/repo/my-agent")
+        agent_names_or_refs: Vec<String>,
+    },
+
+    /// Disable one or more subagents
+    Disable {
+        /// Subagent names or references (e.g., "my-agent" or "owner/repo/my-agent")
+        agent_names_or_refs: Vec<String>,
+    },
+
+    /// List all subagents
+    #[command(visible_aliases = ["ls"])]
+    List {
+        /// Show all subagents (enabled and disabled)
+        #[arg(short, long)]
+        all: bool,
+
+        /// Filter by status (enabled or disabled)
+        #[arg(long)]
+        status: Option<String>,
+
+        /// Show only subagent names (one per line)
+        #[arg(long)]
+        name_only: bool,
+    },
+}
+
+#[derive(Debug, Subcommand)]
 pub enum IntegrationAction {
     /// Add/enable an integration
     #[command(visible_alias = "enable")]
@@ -185,6 +219,10 @@ pub enum IntegrationAction {
         /// Custom skills directory path (required for unknown integrations)
         #[arg(long)]
         path: Option<String>,
+
+        /// Custom agents directory path (for custom integrations)
+        #[arg(long)]
+        agents_path: Option<String>,
     },
 
     /// Remove/disable an integration

@@ -2,6 +2,66 @@
 
 ## Unreleased
 
+### Added
+
+- **Subagent (Agent) support** - Agents can now be discovered and managed alongside skills
+  - `sm subagents enable/disable/list` - Manage agents
+  - Agent discovery from `AGENT.md` files (parallel to `SKILL.md` for skills)
+  - Interactive mode shows both skills and agents with color-coded labels
+  - `sm add -i <url>` now detects and displays agents from repositories
+  - `--agents-path` flag for integrations to specify agent installation directory
+
+- **Consistent label colors** - Skill and agent labels use consistent colors across all commands
+  - `[skill]` labels appear in cyan
+  - `[agent]` labels appear in yellow
+  - Colors consistent across `sm list`, `sm` (interactive), and `sm add -i`
+
+- **Multi-repository operations**
+  - `sm repo add <url1> <url2> <url3>` - Add multiple repositories in one command
+  - `sm repo rm <repo1> <repo2> <repo3>` - Remove multiple repositories with progress summary
+  - Partial success reporting when some operations fail
+
+- **Standardized cache location** - Cache location is now consistent across all platforms
+  - Uses `~/.cache/agent-skill-manager` on all Unix-based systems
+  - No longer uses platform-specific directories like `~/Library/Caches` on macOS
+
+- **Lenient file:// URL parsing**
+  - `file://path/to/repo` is auto-corrected to `/path/to/repo`
+  - `file:///path/to/repo` (correct format) also works
+
+- **Universal git support** - Repository references now support any git source
+  - HTTPS URLs from any domain (GitLab, Bitbucket, self-hosted servers)
+  - SSH URLs (`git@host:owner/repo.git` format)
+  - Local filesystem paths (absolute, relative, ~-prefixed, file:// URLs)
+  - Tag and commit references with `@tag` or `@sha` suffix
+
+### Fixed
+
+- **Orphaned agent cleanup** - Agents are now properly removed when their repository is deleted
+  - Previously, disabling a repo only removed skills, leaving orphaned agent entries
+  - Now removes both skills and agents from config and filesystem
+
+- **Bare `sm` command now shows skills from local repositories**
+  - Interactive mode correctly detects and displays skills from locally-cloned repositories
+  - Properly handles repo_id format for local paths
+
+- **Interactive mode with local paths** - `sm add -i /path/to/repo` now works correctly
+  - Previously failed with "Not a valid GitHub skill reference" error
+  - Now successfully shows interactive selection from local repositories
+
+- **Consistent flag behavior** - `-a` short flag now consistently means `--all` across all commands
+  - Changed `sm list -a` from meaning `--agents` to meaning `--all`
+  - Agent filtering now uses `-g` short flag where needed
+
+- **Fixed interactive mode not detecting legacy cache paths**
+  - Skills and agents from repos cloned before universal git support are now properly detected
+  - Symlink creation works correctly regardless of cache path format
+
+- **Improved error messages for `sm add` when given repository URLs instead of skill references**
+  - Now suggests `sm add -i <url>` for interactive mode
+  - Suggests `sm repo add` then `sm skills enable` as alternative
+  - Removed GitHub-specific language from error messages
+
 ## Version 0.0.3 (2026-01-16)
 
 - **Multi-integration support** - Skills can now be enabled for multiple coding agents simultaneously
