@@ -369,10 +369,12 @@ fn reconcile_skills(
 
             // Remove symlinks from all integrations
             for (_int_name, integration) in &config.integrations {
-                let skills_dir = PathBuf::from(&integration.skills_dir);
-                let link_path = skills_dir.join(skill_name);
-                if link_path.exists() || link_path.symlink_metadata().is_ok() {
-                    std::fs::remove_file(&link_path).ok();
+                if let Some(ref skills_dir_str) = integration.skills_dir {
+                    let skills_dir = PathBuf::from(skills_dir_str);
+                    let link_path = skills_dir.join(skill_name);
+                    if link_path.exists() || link_path.symlink_metadata().is_ok() {
+                        std::fs::remove_file(&link_path).ok();
+                    }
                 }
             }
 

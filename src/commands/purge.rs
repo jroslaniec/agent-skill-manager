@@ -39,14 +39,30 @@ pub fn purge(force: bool) -> Result<()> {
 
     let repo_count = config.repositories.len();
     let skill_count = config.skills.len();
+    let agent_count = config.agents.len();
 
     // 1. Remove all skill symlinks from all integrations
     for skill_name in config.skills.keys() {
         for (_int_name, integration) in &config.integrations {
-            let skills_dir = PathBuf::from(&integration.skills_dir);
-            let link_path = skills_dir.join(skill_name);
-            if link_path.exists() {
-                std::fs::remove_file(&link_path).ok();
+            if let Some(ref skills_dir_str) = integration.skills_dir {
+                let skills_dir = PathBuf::from(skills_dir_str);
+                let link_path = skills_dir.join(skill_name);
+                if link_path.exists() {
+                    std::fs::remove_file(&link_path).ok();
+                }
+            }
+        }
+    }
+
+    // 1b. Remove all agent symlinks from all integrations
+    for agent_name in config.agents.keys() {
+        for (_int_name, integration) in &config.integrations {
+            if let Some(ref agents_dir_str) = integration.agents_dir {
+                let agents_dir = PathBuf::from(agents_dir_str);
+                let link_path = agents_dir.join(format!("{}.md", agent_name));
+                if link_path.exists() {
+                    std::fs::remove_file(&link_path).ok();
+                }
             }
         }
     }
@@ -62,9 +78,10 @@ pub fn purge(force: bool) -> Result<()> {
     lock.write_config(&Config::new())?;
 
     println!(
-        "Purged {} repositories and {} skills",
+        "Purged {} repositories, {} skills, and {} agents",
         style(repo_count).cyan(),
-        style(skill_count).cyan()
+        style(skill_count).cyan(),
+        style(agent_count).cyan()
     );
 
     Ok(())

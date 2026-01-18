@@ -919,7 +919,12 @@ fn create_skill_symlinks_for_all_integrations(
     let mut errors: Vec<(String, String)> = Vec::new();
 
     for (name, integration) in &config.integrations {
-        let skills_dir = PathBuf::from(&integration.skills_dir);
+        // Skip integrations that don't have a skills directory
+        let skills_dir_str = match &integration.skills_dir {
+            Some(dir) => dir,
+            None => continue,
+        };
+        let skills_dir = PathBuf::from(skills_dir_str);
 
         // Create directory if it doesn't exist
         if !skills_dir.exists() {
@@ -955,7 +960,12 @@ pub fn remove_skill_symlinks_from_all_integrations(
     config: &Config,
 ) {
     for (name, integration) in &config.integrations {
-        let skills_dir = PathBuf::from(&integration.skills_dir);
+        // Skip integrations that don't have a skills directory
+        let skills_dir_str = match &integration.skills_dir {
+            Some(dir) => dir,
+            None => continue,
+        };
+        let skills_dir = PathBuf::from(skills_dir_str);
         let link_path = skills_dir.join(skill_name);
 
         if link_path.is_symlink() {

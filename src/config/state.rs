@@ -50,7 +50,14 @@ pub struct Agent {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Integration {
-    pub skills_dir: String,  // Path to skills directory (e.g., "~/.claude/skills")
+    /// Path to skills directory (e.g., "~/.claude/skills")
+    /// Optional: Some integrations may only support agents
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skills_dir: Option<String>,
+    /// Path to agents directory (e.g., "~/.claude/agents")
+    /// Optional: Some integrations may only support skills
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agents_dir: Option<String>,
     #[serde(default = "chrono_now")]
     pub enabled_at: String,
 }
@@ -231,11 +238,12 @@ impl Config {
     }
 
     /// Add an integration
-    pub fn add_integration(&mut self, name: String, skills_dir: String) {
+    pub fn add_integration(&mut self, name: String, skills_dir: Option<String>, agents_dir: Option<String>) {
         self.integrations.insert(
             name,
             Integration {
                 skills_dir,
+                agents_dir,
                 enabled_at: chrono_now(),
             },
         );
@@ -401,5 +409,73 @@ mod tests {
 "#;
         let config = Config::from_toml(toml_str).unwrap();
         assert!(config.agents.is_empty());
+    }
+
+    #[test]
+    fn test_integration_with_both_dirs() {
+        let mut config = Config::new();
+        config.add_integration(
+            "claude-code".to_string(),
+            Some("/home/user/.claude/skills".to_string()),
+            Some("/home/user/.claude/agents".to_string()),
+        );
+
+        let toml_str = config.to_toml().unwrap();
+        let parsed: Config = Config::from_toml(&toml_str).unwrap();
+
+        let integration = parsed.integrations.get("claude-code").unwrap();
+        assert_eq!(integration.skills_dir, Some("/home/user/.claude/skills".to_string()));
+        assert_eq!(integration.agents_dir, Some("/home/user/.claude/agents".to_string()));
+    }
+
+    #[test]
+    fn test_integration_skills_only() {
+        let mut config = Config::new();
+        config.add_integration(
+            "codex".to_string(),
+            Some("/home/user/.codex/skills".to_string()),
+            None,  // codex doesn't support agents
+        );
+
+        let toml_str = config.to_toml().unwrap();
+        let parsed: Config = Config::from_toml(&toml_str).unwrap();
+
+        let integration = parsed.integrations.get("codex").unwrap();
+        assert_eq!(integration.skills_dir, Some("/home/user/.codex/skills".to_string()));
+        assert!(integration.agents_dir.is_none());
+    }
+
+    #[test]
+    fn test_backward_compatibility_old_integration_format() {
+        // Old config format only had skills_dir as a plain string
+        let toml_str = r#"
+[integrations.claude-code]
+skills_dir = "/home/user/.claude/skills"
+enabled_at = "2024-01-01T00:00:00Z"
+"#;
+        let config = Config::from_toml(toml_str).unwrap();
+
+        let integration = config.integrations.get("claude-code").unwrap();
+        assert_eq!(integration.skills_dir, Some("/home/user/.claude/skills".to_string()));
+        // agents_dir should be None since it wasn't in the old format
+        assert!(integration.agents_dir.is_none());
+    }
+
+    #[test]
+    fn test_integration_agents_dir_only() {
+        // Some integrations might only have agents_dir (hypothetical case)
+        let mut config = Config::new();
+        config.add_integration(
+            "agents-only".to_string(),
+            None,
+            Some("/home/user/.agents".to_string()),
+        );
+
+        let toml_str = config.to_toml().unwrap();
+        let parsed: Config = Config::from_toml(&toml_str).unwrap();
+
+        let integration = parsed.integrations.get("agents-only").unwrap();
+        assert!(integration.skills_dir.is_none());
+        assert_eq!(integration.agents_dir, Some("/home/user/.agents".to_string()));
     }
 }

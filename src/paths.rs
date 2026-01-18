@@ -71,14 +71,60 @@ pub fn get_builtin_skills_dir(name: &str) -> Option<PathBuf> {
     }
 }
 
+/// Get the default agents directory for a built-in integration
+/// Returns None for integrations that don't support agents (e.g., codex uses AGENTS.md)
+pub fn get_builtin_agents_dir(name: &str) -> Option<PathBuf> {
+    let home = dirs::home_dir()?;
+    let normalized = normalize_integration_name(name);
+    match normalized.as_str() {
+        "claude-code" => Some(home.join(".claude").join("agents")),
+        "opencode" => Some(home.join(".config").join("opencode").join("agent")),
+        "gemini-cli" => Some(home.join(".gemini").join("agents")),
+        // codex uses AGENTS.md, not individual agent files
+        "codex" => None,
+        _ => None,
+    }
+}
+
+/// Built-in integration info with default skills and agents directories
+pub struct BuiltinIntegration {
+    pub name: &'static str,
+    pub skills_dir: Option<&'static str>,
+    pub agents_dir: Option<&'static str>,
+}
+
 /// List of known built-in integrations with their default paths
-pub fn builtin_integrations() -> Vec<(&'static str, &'static str)> {
+pub fn builtin_integrations() -> Vec<BuiltinIntegration> {
     vec![
-        ("claude-code", "~/.claude/skills"),
-        ("codex", "~/.codex/skills"),
-        ("gemini-cli", "~/.gemini/skills"),
-        ("opencode", "~/.config/opencode/skill"),
+        BuiltinIntegration {
+            name: "claude-code",
+            skills_dir: Some("~/.claude/skills"),
+            agents_dir: Some("~/.claude/agents"),
+        },
+        BuiltinIntegration {
+            name: "codex",
+            skills_dir: Some("~/.codex/skills"),
+            agents_dir: None,  // codex uses AGENTS.md
+        },
+        BuiltinIntegration {
+            name: "gemini-cli",
+            skills_dir: Some("~/.gemini/skills"),
+            agents_dir: Some("~/.gemini/agents"),
+        },
+        BuiltinIntegration {
+            name: "opencode",
+            skills_dir: Some("~/.config/opencode/skill"),
+            agents_dir: Some("~/.config/opencode/agent"),
+        },
     ]
+}
+
+/// Legacy function for backward compatibility - returns (name, skills_dir) pairs
+pub fn builtin_integrations_skills_only() -> Vec<(&'static str, &'static str)> {
+    builtin_integrations()
+        .into_iter()
+        .filter_map(|bi| bi.skills_dir.map(|sd| (bi.name, sd)))
+        .collect()
 }
 
 /// Expand ~ in path to home directory
@@ -234,7 +280,32 @@ mod tests {
         // Should have 4 built-in integrations
         assert_eq!(integrations.len(), 4);
 
-        // Verify claude-code is present
-        assert!(integrations.iter().any(|(name, _)| *name == "claude-code"));
+        // Verify claude-code is present with both directories
+        let claude = integrations.iter().find(|bi| bi.name == "claude-code");
+        assert!(claude.is_some());
+        let claude = claude.unwrap();
+        assert_eq!(claude.skills_dir, Some("~/.claude/skills"));
+        assert_eq!(claude.agents_dir, Some("~/.claude/agents"));
+
+        // Verify codex has no agents_dir
+        let codex = integrations.iter().find(|bi| bi.name == "codex");
+        assert!(codex.is_some());
+        assert!(codex.unwrap().agents_dir.is_none());
+    }
+
+    #[test]
+    fn test_get_builtin_agents_dir() {
+        // Claude-code should have agents dir
+        let claude = get_builtin_agents_dir("claude-code");
+        assert!(claude.is_some());
+        assert!(claude.unwrap().to_string_lossy().contains(".claude"));
+
+        // Codex should not have agents dir
+        let codex = get_builtin_agents_dir("codex");
+        assert!(codex.is_none());
+
+        // Unknown integration should return None
+        let unknown = get_builtin_agents_dir("unknown");
+        assert!(unknown.is_none());
     }
 }
