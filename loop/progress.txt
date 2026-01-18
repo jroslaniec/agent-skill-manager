@@ -10,6 +10,28 @@
 - Integration struct has skills_dir and agents_dir as Option<String>; use `if let Some(ref dir) = integration.skills_dir` pattern
 - Use `paths::get_builtin_agents_dir(name)` for agent directories (returns None for codex)
 - BuiltinIntegration struct in paths.rs has name, skills_dir (Option), agents_dir (Option)
+- Use `scan_for_agents()` alongside `scan_for_skills()` to discover both types during repo add/upgrade
+- When reconciling agents in upgrade, use `reconcile_agents()` parallel to `reconcile_skills()`
+
+---
+
+## 2026-01-18 - US-007
+- Added AGENT.md discovery to repo scanning
+- Files changed:
+  - `src/commands/repo.rs` - Added scan_for_agents(), reconcile_agents(), updated add() and upgrade_with_lock()
+- **Changes made:**
+  - New `scan_for_agents()` function finds directories containing AGENT.md (parallel to scan_for_skills)
+  - New `reconcile_agents()` function handles agent changes during repo upgrade
+  - `add()` now scans for both skills and agents, registers agents in config as disabled
+  - `upgrade_with_lock()` now reconciles both skills and agents, shows [skill]/[agent] prefixes in output
+  - Output message format updated to show "X skills, Y agents" or "X skills" or "Y agents" etc.
+  - 10 new unit tests for agent/skill discovery functions
+  - 72 total tests pass
+- **Learnings for future iterations:**
+  - scan_for_agents() and scan_for_skills() are identical except for the MD file name (AGENT.md vs SKILL.md)
+  - reconcile_agents() mirrors reconcile_skills() - use the same pattern for agent symlink paths (with .md suffix)
+  - A directory with both SKILL.md and AGENT.md is treated as both a skill and an agent (per edge case test)
+  - Agent symlinks go to `{agents_dir}/{name}.md` (file symlink), skills go to `{skills_dir}/{name}/` (directory symlink)
 
 ---
 
