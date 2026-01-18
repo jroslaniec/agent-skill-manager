@@ -1,0 +1,152 @@
+# Progress Log
+
+## 2026-01-18 - US-020: Fix sm upgrade for repos cloned before universal git support
+
+- What was implemented:
+  - Added `resolve_repo_cache_path()` function in `paths.rs` that checks both new-style and legacy cache paths
+  - Added `legacy_github_cache_path()` helper function for backward compatibility
+  - Updated `upgrade_with_lock()` in `repo.rs` to use `resolve_repo_cache_path()` instead of `repo_cache_path()`
+  - Updated `pin()` in `repo.rs` to use `resolve_repo_cache_path()` as well
+
+- Files changed:
+  - src/paths.rs - Added resolve_repo_cache_path(), legacy_github_cache_path(), and 4 tests
+  - src/commands/repo.rs - Updated upgrade_with_lock() and pin() to use resolve_repo_cache_path()
+
+- **Learnings for future iterations:**
+  - Before universal git support, GitHub repos were cached at `git/{owner}/{repo}` (legacy path)
+  - After universal git support, repos are cached at `git/{host}/{owner}/{repo}` (new path)
+  - When accessing existing repos (upgrade, pin), use `resolve_repo_cache_path()` which checks both paths
+  - For new clones, use `repo_cache_path()` which always returns the new-style path
+  - Only GitHub repos have legacy paths - other git sources (GitLab, local) don't need this handling
+
+---
+
+## 2026-01-18 - US-021: Fix agent symlinks not created in ~/.claude/agents/
+
+- What was implemented:
+  - Added `migrate_integration_agents_dirs()` method to Config struct in `state.rs`
+  - This method auto-populates `agents_dir` for built-in integrations when missing
+  - Migration is triggered in `enable_with_lock()` before creating agent symlinks
+  - Added 5 new unit tests for the migration logic
+
+- Files changed:
+  - src/config/state.rs - Added migrate_integration_agents_dirs() and 5 tests
+  - src/commands/subagent.rs - Call migration at start of enable_with_lock()
+
+- **Learnings for future iterations:**
+  - When adding new config fields, consider backward compatibility for existing configs
+  - Built-in integrations have default values defined in `paths.rs` via `builtin_integrations()`
+  - Migration functions should be idempotent (safe to run multiple times)
+  - Integration configs added before agent support only have `skills_dir`, need migration for `agents_dir`
+
+---
+
+## 2026-01-18 - US-019: Fix sm add error message for non-GitHub URLs
+
+- What was implemented:
+  - Updated `sm add` command to detect when input is a repository URL (not a skill reference)
+  - When a repo URL is detected, provides helpful error message with suggestions:
+    - Use `sm add -i <url>` for interactive mode
+    - Use `sm repo add <url>` then `sm skills enable <name>`
+  - Updated `SkillRef::parse()` error message to reference universal git support
+  - Tested with GitLab HTTPS, SSH URLs, and local paths - all provide helpful messages
+
+- Files changed:
+  - src/commands/skill.rs - Modified add() function to detect repo URLs and suggest alternatives
+  - src/skill_ref.rs - Updated error message in parse() to mention universal git support
+
+- **Learnings for future iterations:**
+  - SkillRef is GitHub-specific (legacy) and handles github.com/owner/repo/skill format
+  - RepoRef is universal and handles any git source (HTTPS, SSH, local paths)
+  - The sm add command expects skill references, not repo URLs - when users provide repo URLs, suggest -i flag or sm repo add
+
+---
+
+## 2026-01-18 - US-022: Fix interactive mode not showing skills from legacy cache paths
+
+- What was implemented:
+  - Updated `manage()` function in `skill.rs` to use `paths::resolve_repo_cache_path()` instead of manually building cache path
+  - This allows interactive mode to find repos at both new-style (`git/{host}/{owner}/{repo}`) and legacy (`git/{owner}/{repo}`) paths
+  - Removed unused `git_cache` variable from `manage()` function
+
+- Files changed:
+  - src/commands/skill.rs - Updated manage() to use resolve_repo_cache_path()
+
+- **Learnings for future iterations:**
+  - Same pattern as US-020: any function that looks up existing repos should use `resolve_repo_cache_path()`
+  - Functions affected by this: upgrade_with_lock(), pin(), and now manage()
+  - The interactive mode's `manage()` function iterates over all registered repos and scans for skills/agents
+
+---
+
+## 2026-01-18 - US-023: Improve sm repo ls output with skill and agent counts
+
+- What was implemented:
+  - Updated `list()` function in `repo.rs` to show separate SKILLS and AGENTS columns
+  - Changed from TOTAL/ENABLED/DISABLED columns to ratio format (enabled/total)
+  - Skills displayed in green, agents in blue for visual distinction
+  - Uses existing `skills_for_repo()` and `agents_for_repo()` helper methods from Config
+
+- Files changed:
+  - src/commands/repo.rs - Updated list() function with new column format
+
+- **Learnings for future iterations:**
+  - Config struct already has `skills_for_repo()` and `agents_for_repo()` helper methods
+  - Use ratio format (e.g., "4/6") when showing enabled vs total counts for clarity
+  - Styling with different colors (green, blue) helps distinguish skill vs agent counts
+
+---
+
+## 2026-01-18 - US-024: Fix inconsistent -a flag behavior across commands
+
+- What was implemented:
+  - Changed `-a` short flag in `sm list` to mean `--all` (was previously meaning `--agents`)
+  - Changed `--agents` short flag from `-a` to `-g` in `sm list`
+  - Now `-a` consistently means `--all` across all list commands: `sm list -a`, `sm skills list -a`, `sm subagents list -a`
+
+- Files changed:
+  - src/cli.rs - Updated flag definitions in Command::List
+
+- **Learnings for future iterations:**
+  - Keep CLI short flags consistent across similar commands (all list commands should have same short flags for same functionality)
+  - `-a` is a common short flag for `--all` - don't use it for other purposes
+  - When adding new filter flags, consider what short flags are already in use
+
+---
+
+## 2026-01-18 - US-025: Fix broken symlinks when re-enabling skills
+
+- What was implemented:
+  - Updated `enable_with_lock()` in `skill.rs` to use `resolve_repo_cache_path()` instead of building path with `repo_ref.cache_path()`
+  - Updated `enable_with_lock()` in `subagent.rs` to use `resolve_repo_cache_path()` instead of `repo_cache_path()`
+  - Both functions now correctly resolve the actual cache location for repos cloned before universal git support
+
+- Files changed:
+  - src/commands/skill.rs - Changed cache path resolution in enable_with_lock()
+  - src/commands/subagent.rs - Changed cache path resolution in enable_with_lock()
+
+- **Learnings for future iterations:**
+  - All functions that re-enable skills/agents (not just read config) must use `resolve_repo_cache_path()`
+  - The pattern is now: manage(), enable_with_lock() (skills), enable_with_lock() (agents), upgrade_with_lock(), pin()
+  - The fix is simple (one function call change) but needs to be applied wherever symlinks are created for existing items
+
+---
+
+## 2026-01-18 - US-026: Add git source type indicator to sm repo ls
+
+- What was implemented:
+  - Added `url_to_source_type()` helper function in `repo.rs` that determines git source type from URL
+  - Updated `list()` function to include a SOURCE column showing [https], [ssh], or [local]
+  - Extended header and separator line lengths to accommodate new column
+  - Added 3 unit tests for the helper function
+
+- Files changed:
+  - src/commands/repo.rs - Added url_to_source_type(), updated list() output, added 3 tests
+
+- **Learnings for future iterations:**
+  - Repository struct stores the `url` field which is the git clone URL
+  - Source type detection is simple: git@ prefix = SSH, / or file:// prefix = local, everything else = HTTPS
+  - When displaying URL-derived information, parse the URL in the display function rather than requiring it to be stored separately
+  - Output formatting: when adding new columns, remember to adjust both header and separator line lengths
+
+---

@@ -365,8 +365,8 @@
         "cargo test passes"
       ],
       "priority": 24,
-      "passes": false,
-      "notes": "BUG: Severity medium. Repro: 'sm list -a' shows only agents; 'sm skills list -a' shows all skills. Root cause: In cli.rs, 'sm list' has -a for --agents but no short for --all; 'sm skills list' has -a for --all. Affected: src/cli.rs"
+      "passes": true,
+      "notes": "Fixed: Changed -a to mean --all in sm list, changed --agents short flag to -g. Now consistent: sm list -a, sm skills list -a, sm subagents list -a all show all items."
     },
     {
       "id": "US-025",
@@ -379,8 +379,8 @@
         "cargo test passes"
       ],
       "priority": 25,
-      "passes": false,
-      "notes": "BUG: Severity critical. Repro: Have repo cloned before universal git, disable then enable skill - 'file ~/.claude/skills/git-commit' shows broken symlink. Root cause: Same as US-020/US-022. enable_with_lock() uses repo_cache_path() generating new-style paths. Affected: src/commands/skill.rs, src/paths.rs"
+      "passes": true,
+      "notes": "Fixed: Changed enable_with_lock() in both skill.rs and subagent.rs to use resolve_repo_cache_path() instead of repo_cache_path(). This ensures symlinks point to the correct cache location for repos cloned before universal git support."
     },
     {
       "id": "US-026",
@@ -393,8 +393,8 @@
         "cargo test passes"
       ],
       "priority": 26,
-      "passes": false,
-      "notes": "BUG: Severity low. Repro: Add repos via HTTPS, SSH, local path, run 'sm repo ls' - no source type shown. Root cause: list() in repo.rs only displays repo_id, counts, SHA. Source type available in RepoRef.source_type but not displayed. Affected: src/commands/repo.rs"
+      "passes": true,
+      "notes": "Implemented in commit b613439 - added url_to_source_type() helper function that detects source type from stored URL. Added SOURCE column to sm repo ls output showing [https], [ssh], or [local]. Added 3 unit tests. 95 total tests pass."
     },
     {
       "id": "US-027",
