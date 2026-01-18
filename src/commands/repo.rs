@@ -4,6 +4,7 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 use crate::commands::skill::remove_skill_symlinks_from_all_integrations;
+use crate::commands::subagent::remove_agent_symlinks_from_all_integrations;
 use crate::config::ConfigLock;
 use crate::git;
 use crate::paths;
@@ -237,18 +238,38 @@ fn delete_single(lock: &ConfigLock, url: &str, force: bool) -> Result<()> {
         );
     }
 
-    // Check if any skills are using this repository
+    // Check if any skills or agents are using this repository
     let skills = config.skills_for_repo(&repo_ref.repo_id);
-    let enabled_count = skills.iter().filter(|s| s.enabled).count();
+    let agents = config.agents_for_repo(&repo_ref.repo_id);
+    let enabled_skills_count = skills.iter().filter(|s| s.enabled).count();
+    let enabled_agents_count = agents.iter().filter(|a| a.enabled).count();
+    let total_enabled = enabled_skills_count + enabled_agents_count;
 
-    if enabled_count > 0 && !force {
+    if total_enabled > 0 && !force {
+        // Build warning message showing what's enabled
+        let mut enabled_items = Vec::new();
+        if enabled_skills_count > 0 {
+            enabled_items.push(format!(
+                "{} skill{}",
+                enabled_skills_count,
+                if enabled_skills_count == 1 { "" } else { "s" }
+            ));
+        }
+        if enabled_agents_count > 0 {
+            enabled_items.push(format!(
+                "{} agent{}",
+                enabled_agents_count,
+                if enabled_agents_count == 1 { "" } else { "s" }
+            ));
+        }
+
         println!(
-            "{} {} enabled skill(s) from {} are registered.",
+            "{} {} enabled from {} are registered.",
             style("Warning:").yellow(),
-            enabled_count,
+            enabled_items.join(" and "),
             style(&repo_ref.repo_id).cyan()
         );
-        print!("Are you sure you want to remove all these skills? (yes/no): ");
+        print!("Are you sure you want to remove them? (yes/no): ");
         io::stdout().flush()?;
 
         let mut response = String::new();
@@ -260,7 +281,7 @@ fn delete_single(lock: &ConfigLock, url: &str, force: bool) -> Result<()> {
         }
     }
 
-    // Remove all skills from this repository
+    // Collect skill names for this repository
     let skill_names: Vec<String> = skills
         .iter()
         .map(|s| {
@@ -273,9 +294,27 @@ fn delete_single(lock: &ConfigLock, url: &str, force: bool) -> Result<()> {
         .flatten()
         .collect();
 
-    // Remove symlinks from all integrations
+    // Collect agent names for this repository
+    let agent_names: Vec<String> = agents
+        .iter()
+        .map(|a| {
+            config
+                .agents
+                .iter()
+                .find(|(_, agent)| *agent == *a)
+                .map(|(name, _)| name.clone())
+        })
+        .flatten()
+        .collect();
+
+    // Remove skill symlinks from all integrations
     for skill_name in &skill_names {
         remove_skill_symlinks_from_all_integrations(skill_name, &config);
+    }
+
+    // Remove agent symlinks from all integrations
+    for agent_name in &agent_names {
+        remove_agent_symlinks_from_all_integrations(agent_name, &config);
     }
 
     lock.update(|config| {
@@ -284,16 +323,35 @@ fn delete_single(lock: &ConfigLock, url: &str, force: bool) -> Result<()> {
             config.remove_skill(skill_name);
         }
 
+        // Remove all agents
+        for agent_name in &agent_names {
+            config.remove_agent(agent_name);
+        }
+
         // Remove repository
         config.remove_repository(&repo_ref.repo_id);
 
         Ok(())
     })?;
 
+    // Format output message based on what was removed
+    let items_removed = match (skill_names.len(), agent_names.len()) {
+        (0, 0) => "".to_string(),
+        (s, 0) => format!(" and {} skill{}", s, if s == 1 { "" } else { "s" }),
+        (0, a) => format!(" and {} agent{}", a, if a == 1 { "" } else { "s" }),
+        (s, a) => format!(
+            " and {} skill{}, {} agent{}",
+            s,
+            if s == 1 { "" } else { "s" },
+            a,
+            if a == 1 { "" } else { "s" }
+        ),
+    };
+
     println!(
-        "Removed repository {} and {} skill(s)",
+        "Removed repository {}{}",
         style(&repo_ref.repo_id).cyan(),
-        skill_names.len()
+        items_removed
     );
 
     Ok(())

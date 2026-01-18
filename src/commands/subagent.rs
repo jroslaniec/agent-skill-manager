@@ -291,7 +291,7 @@ fn create_agent_symlinks_for_all_integrations(
 }
 
 /// Remove symlinks for an agent from all registered integrations
-fn remove_agent_symlinks_from_all_integrations(
+pub fn remove_agent_symlinks_from_all_integrations(
     agent_name: &str,
     config: &Config,
 ) {
