@@ -151,8 +151,8 @@
         "cargo test passes"
       ],
       "priority": 9,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented enable/disable with file symlinks, 3 new tests, 75 total tests pass"
     },
     {
       "id": "US-010",
@@ -165,8 +165,8 @@
         "cargo test passes"
       ],
       "priority": 10,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented together with US-009 - disable() removes symlinks and updates config"
     },
     {
       "id": "US-011",

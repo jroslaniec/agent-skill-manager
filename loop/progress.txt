@@ -13,6 +13,30 @@
 - Use `scan_for_agents()` alongside `scan_for_skills()` to discover both types during repo add/upgrade
 - When reconciling agents in upgrade, use `reconcile_agents()` parallel to `reconcile_skills()`
 - CLI subcommand groups follow pattern: SubagentAction enum mirrors SkillAction, handlers go in commands/subagent.rs
+- Agent symlinks are FILE symlinks: `{agents_dir}/{name}.md` -> `cached/path/AGENT.md` (unlike skills which are directory symlinks)
+- Use `paths::expand_tilde()` when working with user-provided directory paths (like agents_dir from config)
+
+---
+
+## 2026-01-18 - US-009
+- Implemented sm subagents enable command
+- Files changed:
+  - `src/commands/subagent.rs` - Implemented enable() and disable() functions with helper methods
+- **Changes made:**
+  - `enable()` function looks up agent by name in config, enables it, creates symlinks
+  - `disable()` function removes symlinks and marks agent as disabled in config
+  - `create_agent_symlink()` creates FILE symlink (not directory) pointing to AGENT.md
+  - `create_agent_symlinks_for_all_integrations()` creates symlinks in all integrations with agents_dir
+  - `remove_agent_symlinks_from_all_integrations()` removes symlinks when disabling
+  - Agent symlinks use `.md` extension: `{agents_dir}/{name}.md`
+  - 3 unit tests for symlink creation/replacement/failure
+  - 75 total tests pass
+- **Learnings for future iterations:**
+  - Agent symlinks are FILE symlinks to the AGENT.md file, not directory symlinks (unlike skills)
+  - Agent symlink naming convention: `{agents_dir}/{agent-name}.md`
+  - Must use `paths::expand_tilde()` to handle `~/` in user-configured directory paths
+  - Skip integrations that don't have agents_dir (like codex which only supports skills)
+  - Agents must be registered via `sm repo add` first - no auto-discovery during enable
 
 ---
 
