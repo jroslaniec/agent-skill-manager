@@ -12,6 +12,27 @@
 - BuiltinIntegration struct in paths.rs has name, skills_dir (Option), agents_dir (Option)
 - Use `scan_for_agents()` alongside `scan_for_skills()` to discover both types during repo add/upgrade
 - When reconciling agents in upgrade, use `reconcile_agents()` parallel to `reconcile_skills()`
+- CLI subcommand groups follow pattern: SubagentAction enum mirrors SkillAction, handlers go in commands/subagent.rs
+
+---
+
+## 2026-01-18 - US-008
+- Added sm subagents CLI command group with subcommands
+- Files changed:
+  - `src/cli.rs` - Added SubagentAction enum with enable/disable/list subcommands, added Subagents command variant with aliases
+  - `src/commands/mod.rs` - Added subagent module
+  - `src/commands/subagent.rs` - Created with placeholder functions for enable/disable/list
+  - `src/main.rs` - Added SubagentAction import and handler routing
+- **Changes made:**
+  - SubagentAction enum mirrors SkillAction pattern
+  - Aliases: subagents, subagent, sb (all work)
+  - List subcommand has --all, --status, --name-only flags (matching skills list)
+  - Placeholder implementations print "not yet implemented" messages
+  - 72 total tests pass (no new tests needed for CLI structure)
+- **Learnings for future iterations:**
+  - CLI command groups follow consistent pattern: enum for actions, command handler module
+  - Aliases defined via `#[command(visible_aliases = ["alias1", "alias2"])]`
+  - Placeholder functions can use underscore prefix for unused params (_param) to avoid warnings
 
 ---
 

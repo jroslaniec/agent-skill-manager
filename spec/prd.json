@@ -136,8 +136,8 @@
         "cargo test passes"
       ],
       "priority": 8,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented in commit d2375e3 - SubagentAction enum with enable/disable/list, aliases working, 72 tests pass"
     },
     {
       "id": "US-009",
