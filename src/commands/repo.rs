@@ -194,9 +194,38 @@ fn add_single(lock: &ConfigLock, url: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn delete(url: &str, force: bool) -> Result<()> {
-    let repo_ref = RepoRef::parse(url)?;
+pub fn delete(urls: &[String], force: bool) -> Result<()> {
+    if urls.is_empty() {
+        bail!("At least one repository URL is required");
+    }
+
     let lock = ConfigLock::acquire()?;
+    let mut had_errors = false;
+    let mut success_count = 0;
+
+    for url in urls {
+        if let Err(e) = delete_single(&lock, url, force) {
+            eprintln!("Error removing {}: {}", url, e);
+            had_errors = true;
+        } else {
+            success_count += 1;
+        }
+    }
+
+    // Show summary
+    if urls.len() > 1 {
+        eprintln!("Removed {}/{} repositories", success_count, urls.len());
+    }
+
+    if had_errors {
+        std::process::exit(1);
+    }
+
+    Ok(())
+}
+
+fn delete_single(lock: &ConfigLock, url: &str, force: bool) -> Result<()> {
+    let repo_ref = RepoRef::parse(url)?;
 
     let config = lock.read_config()?;
 

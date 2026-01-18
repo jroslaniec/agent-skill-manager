@@ -9,7 +9,7 @@ fn main() {
         None => commands::skill::manage(),
         Some(Command::Repositories { action }) => match action {
             RepoAction::Add { urls } => commands::repo::add(&urls),
-            RepoAction::Delete { url, force } => commands::repo::delete(&url, force),
+            RepoAction::Delete { urls, force } => commands::repo::delete(&urls, force),
             RepoAction::List => commands::repo::list(),
             RepoAction::Pin { url } => commands::repo::pin(&url),
             RepoAction::Unpin { url } => commands::repo::unpin(&url),

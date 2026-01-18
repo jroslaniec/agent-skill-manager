@@ -106,11 +106,11 @@ pub enum RepoAction {
         urls: Vec<String>,
     },
 
-    /// Delete a repository
+    /// Delete one or more repositories
     #[command(visible_aliases = ["remove", "rm", "del"])]
     Delete {
-        /// Repository URL to delete
-        url: String,
+        /// Repository URLs to delete
+        urls: Vec<String>,
 
         /// Force deletion without confirmation
         #[arg(short, long)]
