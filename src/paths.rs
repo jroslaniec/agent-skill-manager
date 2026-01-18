@@ -2,10 +2,11 @@ use anyhow::{Context, Result};
 use std::path::PathBuf;
 
 /// Get the cache directory for agent-skill-manager
+/// Always uses ~/.cache/agent-skill-manager on all platforms for consistency
 pub fn cache_dir() -> Result<PathBuf> {
-    let cache = dirs::cache_dir()
-        .context("Could not find cache directory")?;
-    Ok(cache.join("agent-skill-manager"))
+    let home = dirs::home_dir()
+        .context("Could not find home directory")?;
+    Ok(home.join(".cache").join("agent-skill-manager"))
 }
 
 /// Get the config file path (in cache directory as requested)
