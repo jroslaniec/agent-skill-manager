@@ -302,3 +302,23 @@
   - When adding cleanup for a new entity type, follow the same pattern: collect names, remove symlinks, update config
 
 ---
+
+## 2026-01-18 - US-004: Fix file:// URL parsing
+
+- What was implemented:
+  - Enhanced `parse_local()` in `skill_ref.rs` to handle lenient file:// URL parsing
+  - Added detection for common Unix root directories (Users, home, var, tmp, opt, usr, etc)
+  - Auto-corrects `file://Users/dev/skills` to `/Users/dev/skills` (adds missing leading slash)
+  - Maintains support for `file:///path` (correct triple slash format)
+  - Added 3 unit tests to verify all file:// URL variations work correctly
+
+- Files changed:
+  - src/skill_ref.rs - Enhanced parse_local() with lenient parsing, added 3 new tests
+
+- **Learnings for future iterations:**
+  - file:// URLs can be malformed in two ways: `file://path` (missing slash) or having missing leading slash after removing `file://`
+  - Common Unix root directories are predictable: Users (macOS), home, var, tmp, opt, usr, etc
+  - When stripping prefixes leaves a relative-looking path, check if it matches common root dirs before treating as relative
+  - Tests should cover both correct format (file:///) and lenient format (file://) variations
+
+---
