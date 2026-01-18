@@ -316,7 +316,8 @@ pub fn pin(url: &str) -> Result<()> {
     }
 
     // Get current SHA from git working directory
-    let repo_cache_path = paths::repo_cache_path(&repo_ref)?;
+    // Use resolve_repo_cache_path to handle legacy cache paths
+    let repo_cache_path = paths::resolve_repo_cache_path(&repo_ref)?;
 
     let current_sha = git::get_current_sha(&repo_cache_path)?;
 
@@ -527,7 +528,8 @@ fn upgrade_with_lock(repo_ref: &RepoRef, lock: &ConfigLock) -> Result<()> {
         );
     }
 
-    let repo_cache_path = paths::repo_cache_path(repo_ref)?;
+    // Use resolve_repo_cache_path to handle legacy cache paths (repos cloned before universal git support)
+    let repo_cache_path = paths::resolve_repo_cache_path(repo_ref)?;
 
     if let Some(target_sha) = &repo_ref.sha {
         // Mode B: Upgrade to specific SHA and pin

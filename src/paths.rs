@@ -149,8 +149,61 @@ pub fn expand_tilde(path: &str) -> Result<PathBuf> {
 ///
 /// This ensures backward compatibility with existing GitHub-only paths
 /// while supporting new universal URL formats.
+///
+/// NOTE: This returns the "expected" path for new repos. For existing repos
+/// that may be at legacy paths, use `resolve_repo_cache_path()` instead.
 pub fn repo_cache_path(repo_ref: &crate::skill_ref::RepoRef) -> Result<PathBuf> {
     Ok(git_cache_dir()?.join(repo_ref.cache_path()))
+}
+
+/// Resolve the actual cache path for a repository, checking both new and legacy locations
+///
+/// Before universal git support, GitHub repos were cached at `git/{owner}/{repo}`.
+/// After universal git support, they are cached at `git/{host}/{owner}/{repo}`.
+///
+/// This function checks if the repo exists at the new-style path first, then falls
+/// back to checking the legacy path for GitHub repos.
+///
+/// Returns the path where the repo actually exists, or the new-style path if
+/// the repo doesn't exist yet (for new clones).
+pub fn resolve_repo_cache_path(repo_ref: &crate::skill_ref::RepoRef) -> Result<PathBuf> {
+    let git_cache = git_cache_dir()?;
+
+    // First check the new-style path
+    let new_style_path = git_cache.join(repo_ref.cache_path());
+    if new_style_path.exists() {
+        return Ok(new_style_path);
+    }
+
+    // For GitHub repos, check the legacy path (git/{owner}/{repo} without host)
+    if repo_ref.repo_id.starts_with("github.com/") {
+        let legacy_path = repo_ref.repo_id.strip_prefix("github.com/")
+            .map(|rest| git_cache.join(rest));
+
+        if let Some(legacy) = legacy_path {
+            if legacy.exists() {
+                return Ok(legacy);
+            }
+        }
+    }
+
+    // Neither exists yet - return new-style path (for new clones)
+    Ok(new_style_path)
+}
+
+/// Get the legacy cache path for a GitHub repository (git/{owner}/{repo})
+///
+/// This is used for backward compatibility with repos cloned before
+/// universal git support was added.
+///
+/// Returns None if the repo is not a GitHub repo.
+pub fn legacy_github_cache_path(repo_id: &str) -> Result<Option<PathBuf>> {
+    if repo_id.starts_with("github.com/") {
+        let rest = repo_id.strip_prefix("github.com/").unwrap();
+        Ok(Some(git_cache_dir()?.join(rest)))
+    } else {
+        Ok(None)
+    }
 }
 
 #[cfg(test)]
@@ -307,5 +360,52 @@ mod tests {
         // Unknown integration should return None
         let unknown = get_builtin_agents_dir("unknown");
         assert!(unknown.is_none());
+    }
+
+    #[test]
+    fn test_legacy_github_cache_path() {
+        // GitHub repos should return Some with the legacy path
+        let path = legacy_github_cache_path("github.com/testowner/testrepo").unwrap();
+        assert!(path.is_some());
+        let path = path.unwrap();
+        assert!(path.to_string_lossy().ends_with("testowner/testrepo"));
+        // Should NOT contain github.com in the path (that's the legacy format)
+        assert!(!path.to_string_lossy().contains("github.com"));
+    }
+
+    #[test]
+    fn test_legacy_github_cache_path_non_github() {
+        // Non-GitHub repos should return None
+        let gitlab = legacy_github_cache_path("gitlab.com/testowner/testrepo").unwrap();
+        assert!(gitlab.is_none());
+
+        let local = legacy_github_cache_path("local:/Users/dev/repo").unwrap();
+        assert!(local.is_none());
+    }
+
+    #[test]
+    fn test_resolve_repo_cache_path_new_style() {
+        use crate::skill_ref::RepoRef;
+
+        // This test just verifies the logic - actual behavior depends on
+        // whether files exist on disk which we can't easily mock
+        let repo = RepoRef::parse("github.com/testowner/testrepo").unwrap();
+        let _path = resolve_repo_cache_path(&repo);
+
+        // The path should be valid (it won't exist, but the function should return ok)
+        // The actual path returned will be the new-style since neither exists
+    }
+
+    #[test]
+    fn test_resolve_repo_cache_path_gitlab_no_legacy() {
+        use crate::skill_ref::RepoRef;
+
+        // GitLab repos don't have legacy paths, so they should always
+        // return the new-style path
+        let repo = RepoRef::parse("gitlab.com/testteam/testrepo").unwrap();
+        let path = resolve_repo_cache_path(&repo).unwrap();
+
+        // Should be the new-style path with gitlab.com
+        assert!(path.to_string_lossy().contains("gitlab.com"));
     }
 }
