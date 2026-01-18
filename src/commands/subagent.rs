@@ -14,7 +14,7 @@ pub fn enable(agent_names_or_refs: &[String]) -> Result<()> {
     enable_with_lock(&lock, agent_names_or_refs)
 }
 
-fn enable_with_lock(lock: &ConfigLock, agent_names_or_refs: &[String]) -> Result<()> {
+pub fn enable_with_lock(lock: &ConfigLock, agent_names_or_refs: &[String]) -> Result<()> {
     for agent_name_or_ref in agent_names_or_refs {
         let config = lock.read_config()?;
 
@@ -65,7 +65,7 @@ pub fn disable(agent_names_or_refs: &[String]) -> Result<()> {
     disable_with_lock(&lock, agent_names_or_refs)
 }
 
-fn disable_with_lock(lock: &ConfigLock, agent_names_or_refs: &[String]) -> Result<()> {
+pub fn disable_with_lock(lock: &ConfigLock, agent_names_or_refs: &[String]) -> Result<()> {
     for agent_name_or_ref in agent_names_or_refs {
         let config = lock.read_config()?;
 

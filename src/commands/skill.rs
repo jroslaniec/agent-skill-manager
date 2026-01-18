@@ -5,6 +5,7 @@ use std::io::IsTerminal;
 use std::os::unix::fs as unix_fs;
 use std::path::{Path, PathBuf};
 
+use crate::commands::subagent;
 use crate::config::state::Config;
 use crate::config::ConfigLock;
 use crate::git;
@@ -726,89 +727,118 @@ pub fn manage() -> Result<()> {
         return Ok(());
     }
 
-    // Collect all available skills from all repositories
+    // Item type for combined skills and agents
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    enum ItemType {
+        Skill,
+        Agent,
+    }
+
     #[derive(Debug, Clone)]
-    struct SkillItem {
+    struct Item {
+        item_type: ItemType,
         name: String,
         repo_id: String,
-        full_ref: String,
         enabled: bool,
     }
 
-    let mut all_skills: Vec<SkillItem> = Vec::new();
+    let mut all_items: Vec<Item> = Vec::new();
     let git_cache = paths::git_cache_dir()?;
 
-    for (repo_id, _repo_info) in &config.repositories {
-        // Parse repo_id to get owner/repo and path
-        // repo_id format: "github.com/owner/repo" or "github.com/owner/repo/path"
-        let parts: Vec<&str> = repo_id.split('/').collect();
-        if parts.len() < 3 {
-            continue;
-        }
-
-        let owner = parts[1];
-        let repo = parts[2];
-        let repo_path = if parts.len() > 3 {
-            parts[3..].join("/")
-        } else {
-            String::new()
+    for (repo_id, repo_info) in &config.repositories {
+        // Parse repo reference to get cache path
+        let repo_ref = match RepoRef::parse(repo_id) {
+            Ok(r) => r,
+            Err(_) => {
+                // Try parsing the url from config
+                match RepoRef::parse(&repo_info.url) {
+                    Ok(r) => r,
+                    Err(_) => continue,
+                }
+            }
         };
 
-        let repo_cache_path = git_cache.join(owner).join(repo);
+        let repo_cache_path = git_cache.join(repo_ref.cache_path());
         if !repo_cache_path.exists() {
             continue;
         }
 
-        // Determine scan path
-        let scan_path = if repo_path.is_empty() {
+        // Determine scan path based on repo's path (subdirectory within repo)
+        let scan_path = if repo_info.path.is_empty() {
             repo_cache_path.clone()
         } else {
-            repo_cache_path.join(&repo_path)
+            repo_cache_path.join(&repo_info.path)
         };
 
         // Scan for skills
         let skills = scan_for_skills(&scan_path)?;
-
         for skill_name in skills {
-            let full_ref = format!("{}/{}", repo_id, skill_name);
-
             let enabled = config.skills.get(&skill_name)
                 .map(|s| s.enabled)
                 .unwrap_or(false);
 
-            all_skills.push(SkillItem {
+            all_items.push(Item {
+                item_type: ItemType::Skill,
                 name: skill_name,
                 repo_id: repo_id.clone(),
-                full_ref,
+                enabled,
+            });
+        }
+
+        // Scan for agents
+        let agents = scan_for_agents(&scan_path)?;
+        for agent_name in agents {
+            let enabled = config.agents.get(&agent_name)
+                .map(|a| a.enabled)
+                .unwrap_or(false);
+
+            all_items.push(Item {
+                item_type: ItemType::Agent,
+                name: agent_name,
+                repo_id: repo_id.clone(),
                 enabled,
             });
         }
     }
 
-    if all_skills.is_empty() {
-        println!("No skills found in registered repositories.");
+    if all_items.is_empty() {
+        println!("No skills or agents found in registered repositories.");
         return Ok(());
     }
 
-    // Sort skills by name
-    all_skills.sort_by(|a, b| a.name.cmp(&b.name));
+    // Sort by name, then by type for stability
+    all_items.sort_by(|a, b| {
+        a.name.cmp(&b.name).then_with(|| {
+            match (&a.item_type, &b.item_type) {
+                (ItemType::Skill, ItemType::Agent) => std::cmp::Ordering::Less,
+                (ItemType::Agent, ItemType::Skill) => std::cmp::Ordering::Greater,
+                _ => std::cmp::Ordering::Equal,
+            }
+        })
+    });
 
-    // Build options for multi-select
-    let options: Vec<String> = all_skills
+    // Build options for multi-select with type prefixes
+    let options: Vec<String> = all_items
         .iter()
-        .map(|s| format!("{} ({})", s.name, s.repo_id))
+        .map(|item| {
+            let type_prefix = match item.item_type {
+                ItemType::Skill => "[skill]",
+                ItemType::Agent => "[agent]",
+            };
+            format!("{} {} ({})", type_prefix, item.name, item.repo_id)
+        })
         .collect();
 
-    // Get indices of currently enabled skills
-    let default_indices: Vec<usize> = all_skills
+    // Get indices of currently enabled items
+    let default_indices: Vec<usize> = all_items
         .iter()
         .enumerate()
-        .filter(|(_, s)| s.enabled)
+        .filter(|(_, item)| item.enabled)
         .map(|(i, _)| i)
         .collect();
 
     // Show multi-select prompt
-    let selected = inquire::MultiSelect::new("Select skills:", options.clone())
+    let selected = inquire::MultiSelect::new("Select skills and agents:", options.clone())
         .with_default(&default_indices)
         .with_help_message("↑↓ to move, Space to toggle, Enter to save, Esc to cancel")
         .with_formatter(&|_| String::new())
@@ -824,31 +854,56 @@ pub fn manage() -> Result<()> {
     };
 
     // Determine what changed by comparing formatted strings
-    let mut to_enable: Vec<String> = Vec::new();
-    let mut to_disable: Vec<String> = Vec::new();
+    let mut skills_to_enable: Vec<String> = Vec::new();
+    let mut skills_to_disable: Vec<String> = Vec::new();
+    let mut agents_to_enable: Vec<String> = Vec::new();
+    let mut agents_to_disable: Vec<String> = Vec::new();
 
-    for skill in &all_skills {
-        let formatted = format!("{} ({})", skill.name, skill.repo_id);
-        let should_be_enabled = selected_strings.contains(&formatted);
+    for (idx, item) in all_items.iter().enumerate() {
+        let formatted = &options[idx];
+        let should_be_enabled = selected_strings.contains(formatted);
 
-        if should_be_enabled && !skill.enabled {
-            to_enable.push(skill.full_ref.clone());
-        } else if !should_be_enabled && skill.enabled {
-            to_disable.push(skill.name.clone());
+        match item.item_type {
+            ItemType::Skill => {
+                if should_be_enabled && !item.enabled {
+                    skills_to_enable.push(item.name.clone());
+                } else if !should_be_enabled && item.enabled {
+                    skills_to_disable.push(item.name.clone());
+                }
+            }
+            ItemType::Agent => {
+                if should_be_enabled && !item.enabled {
+                    agents_to_enable.push(item.name.clone());
+                } else if !should_be_enabled && item.enabled {
+                    agents_to_disable.push(item.name.clone());
+                }
+            }
         }
     }
 
-    // Apply changes
-    if !to_enable.is_empty() {
-        enable_with_lock(&lock, &to_enable)?;
+    // Apply skill changes
+    if !skills_to_enable.is_empty() {
+        enable_with_lock(&lock, &skills_to_enable)?;
+    }
+    if !skills_to_disable.is_empty() {
+        disable_with_lock(&lock, &skills_to_disable)?;
     }
 
-    if !to_disable.is_empty() {
-        disable_with_lock(&lock, &to_disable)?;
+    // Apply agent changes
+    if !agents_to_enable.is_empty() {
+        subagent::enable_with_lock(&lock, &agents_to_enable)?;
+    }
+    if !agents_to_disable.is_empty() {
+        subagent::disable_with_lock(&lock, &agents_to_disable)?;
     }
 
     // Show summary
-    if to_enable.is_empty() && to_disable.is_empty() {
+    let no_changes = skills_to_enable.is_empty()
+        && skills_to_disable.is_empty()
+        && agents_to_enable.is_empty()
+        && agents_to_disable.is_empty();
+
+    if no_changes {
         println!("No changes made");
     }
 
@@ -1189,6 +1244,37 @@ fn scan_for_skills(path: &Path) -> Result<Vec<String>> {
 
     skills.sort();
     Ok(skills)
+}
+
+/// Scan a directory for agents (directories containing AGENT.md)
+fn scan_for_agents(path: &Path) -> Result<Vec<String>> {
+    let mut agents = Vec::new();
+
+    if !path.exists() {
+        return Ok(agents);
+    }
+
+    // Read directory entries
+    let entries = std::fs::read_dir(path).context("Failed to read directory")?;
+
+    for entry in entries {
+        let entry = entry?;
+        let entry_path = entry.path();
+
+        // Check if it's a directory
+        if entry_path.is_dir() {
+            // Check if it contains AGENT.md
+            let agent_md = entry_path.join("AGENT.md");
+            if agent_md.exists() {
+                if let Some(agent_name) = entry_path.file_name() {
+                    agents.push(agent_name.to_string_lossy().to_string());
+                }
+            }
+        }
+    }
+
+    agents.sort();
+    Ok(agents)
 }
 
 fn check_for_updates(repo_id: &str, config: &crate::config::state::Config) -> Result<Option<bool>> {
