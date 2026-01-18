@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## Version 0.0.4 (2026-01-18)
+
 ### Added
 
 - **Subagent (Agent) support** - Agents can now be discovered and managed alongside skills
