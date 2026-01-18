@@ -404,3 +404,32 @@
   - Remove "GitHub only" language when feature support becomes universal
 
 ---
+
+## 2026-01-18 - US-009: Update CHANGELOG
+
+- What was implemented:
+  - Documented all new features in Unreleased section:
+    - Subagent (Agent) support with AGENT.md discovery
+    - Consistent label colors (cyan for skills, yellow for agents)
+    - Multi-repository operations (add/remove multiple at once)
+    - Standardized cache location to ~/.cache
+    - Lenient file:// URL parsing
+    - Universal git support recap
+  - Documented all bug fixes in Unreleased section:
+    - Orphaned agent cleanup
+    - Skills showing in bare sm command for local repos
+    - Interactive mode with local paths
+    - Consistent flag behavior
+    - Legacy cache path detection
+    - Improved error messages
+
+- Files changed:
+  - CHANGELOG.md - Expanded Unreleased section with all new features and fixes
+
+- **Learnings for future iterations:**
+  - CHANGELOG should be updated as features are completed, not all at the end
+  - Group related features (e.g., "Multi-repository operations" includes both add and remove)
+  - For bug fixes, explain what was broken and what was fixed
+  - Link features to commands users will use (e.g., "sm subagents enable/disable/list")
+
+---
