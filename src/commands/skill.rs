@@ -1039,7 +1039,6 @@ fn add_interactive(lock: &ConfigLock, skill_refs: &[String]) -> Result<()> {
     #[derive(Debug, Clone)]
     struct SkillItem {
         name: String,
-        full_ref: String,
         enabled: bool,
     }
 
@@ -1047,14 +1046,12 @@ fn add_interactive(lock: &ConfigLock, skill_refs: &[String]) -> Result<()> {
     let mut skills: Vec<SkillItem> = Vec::new();
 
     for skill_name in skill_names {
-        let full_ref = format!("{}/{}", repo_id, skill_name);
         let enabled = config.skills.get(&skill_name)
             .map(|s| s.enabled)
             .unwrap_or(false);
 
         skills.push(SkillItem {
             name: skill_name,
-            full_ref,
             enabled,
         });
     }
@@ -1100,7 +1097,7 @@ fn add_interactive(lock: &ConfigLock, skill_refs: &[String]) -> Result<()> {
         let should_be_enabled = selected_names.contains(&skill.name);
 
         if should_be_enabled && !skill.enabled {
-            to_enable.push(skill.full_ref.clone());
+            to_enable.push(skill.name.clone());
         } else if !should_be_enabled && skill.enabled {
             to_disable.push(skill.name.clone());
         }
