@@ -322,3 +322,25 @@
   - Tests should cover both correct format (file:///) and lenient format (file://) variations
 
 ---
+
+## 2026-01-18 - US-005: Consistent label colors
+
+- What was implemented:
+  - Changed [skill] label color from blue to cyan in `sm list -a` command
+  - Changed [agent] label color from magenta to yellow in `sm list -a` command
+  - Added colored type labels to interactive mode (bare `sm` command) with cyan for [skill] and yellow for [agent]
+  - Added colored type labels to `sm add -i` interactive mode with same color scheme
+  - Extended `sm add -i` to also scan for and show agents (not just skills)
+  - Updated prompt text to say "Select skills and agents:" when agents are detected
+
+- Files changed:
+  - src/commands/skill.rs - Updated colors in list_combined(), manage(), and add_interactive() functions
+
+- **Learnings for future iterations:**
+  - inquire::MultiSelect options strings can include ANSI color codes and they render correctly in the prompt
+  - When refactoring interactive mode to support both skills and agents, create a combined enum for ItemType
+  - Sort combined lists with skills first, then agents, to match user expectations
+  - The style().color().to_string() pattern works well for building colored strings that can be embedded in formatted strings
+  - When adding agent support to skill-only functions, also handle the enable/disable calls for agents separately
+
+---
