@@ -1,10 +1,52 @@
 ## Codebase Patterns
 - RepoRef now uses `repo_id` (field) instead of `repo_id()` (method)
 - RepoRef now uses `clone_url()` method or `git_url` field instead of `git_url()` method
-- Use `repo_ref.cache_path()` to get the path where a repo should be cached
+- Use `paths::repo_cache_path(&repo_ref)` to get full cache path for a repository
 - For conflict checking with remote repos, extract base repo ID with `repo_id.split('/').take(3).collect::<Vec<_>>().join("/")`
 - Local paths use `local:` prefix in repo_id, remote use `host/path` format
+- Unit tests must use placeholder data: testowner, testteam, testrepo, test-skills, example.com, etc. (no real usernames)
+- Git module: error messages must include repository path/URL and git's stderr (NFR-002)
 
+---
+
+## 2026-01-18 - US-004
+- Verified `sm repo add` command supports universal git URLs
+- Files verified:
+  - `src/commands/repo.rs` - `add()` function uses RepoRef.parse() and paths::repo_cache_path()
+- **Implementation status:** Already complete via US-001/US-002/US-003
+  - RepoRef.parse() handles HTTPS, SSH, and local filesystem paths
+  - paths::repo_cache_path() generates unique cache paths for any URL format
+  - git::clone_repo() works with any git source (HTTPS, SSH, local)
+  - All 49 tests pass
+- **Learnings for future iterations:**
+  - User-facing features may already be complete after implementing their underlying modules
+  - Verify end-to-end flow even when components are implemented separately
+---
+
+## 2026-01-18 - US-003
+- Updated git module to handle universal sources (HTTPS, SSH, local paths)
+- Files changed:
+  - `src/git/mod.rs` - Improved error messages, added documentation, added integration tests
+- **Learnings for future iterations:**
+  - Git clone/pull works natively with local paths - no special handling needed
+  - Error messages should include: the URL/path attempted, and the full git stderr
+  - Use `tempfile::TempDir` for creating temporary git repos in tests
+  - Test helper `create_test_repo()` creates a git repo with one commit for testing
+  - When cloning from local path, origin points to source, so pull_to_latest works
+  - Now 49 tests pass (7 new git module tests added)
+---
+
+## 2026-01-18 - US-002
+- Updated cache directory structure for universal URLs
+- Files changed:
+  - `src/paths.rs` - Added `repo_cache_path()` helper function and comprehensive tests
+  - `src/commands/repo.rs` - Refactored to use new `paths::repo_cache_path()` helper
+- **Learnings for future iterations:**
+  - Use `paths::repo_cache_path(&repo_ref)` to get full cache path instead of manually joining paths
+  - Cache structure: remote repos use `{host}/{owner}/{repo}`, local use `local/{dirname}-{hash}`
+  - GitHub paths remain backward compatible: `github.com/owner/repo`
+  - Special characters in paths (like spaces) are handled by hashing for local paths
+  - Now 42 tests pass (10 new path-related tests added)
 ---
 
 ## 2026-01-18 - US-001
@@ -20,4 +62,23 @@
   - Cache paths are now generated via `cache_path()` method which handles different source types
   - Conflict checking logic is only needed for remote repos (local paths are always unique)
   - All 32 tests pass including new tests for GitLab, SSH, and local path parsing
+---
+
+## 2026-01-18 - US-000
+- Replaced live data in unit tests with mock/placeholder data
+- Files changed:
+  - `src/skill_ref.rs` - Updated all 32 tests to use placeholder data
+- **Changes made:**
+  - Replaced `jroslaniec` → `testowner`
+  - Replaced `j.roslaniec` → `test.user`
+  - Replaced `anthropics` → `testorg`
+  - Replaced `myteam` → `testteam`
+  - Replaced `agent-skills` → `test-skills`
+  - Replaced `agentfiles` → `testfiles`
+  - Replaced `git.company.com` → `git.example.com`
+  - All group/subgroup names updated to generic placeholders
+- **Learnings for future iterations:**
+  - Unit tests should always use placeholder data (testowner, testrepo, example.com, etc.)
+  - Real usernames/URLs are only for manual testing sections in PRD
+  - NFR-006 in prd.md requires mock data for unit tests
 ---
