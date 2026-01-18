@@ -548,7 +548,7 @@ pub fn list_skills_only(all: bool, status: Option<&str>, name_only: bool) -> Res
 }
 
 /// Combined list of skills and agents (used by `sm list`)
-pub fn list_combined(all: bool, status: Option<&str>, name_only: bool) -> Result<()> {
+pub fn list_combined(all: bool, status: Option<&str>, name_only: bool, skills_only: bool, agents_only: bool) -> Result<()> {
     let lock = ConfigLock::acquire()?;
     let config = lock.read_config()?;
 
@@ -583,24 +583,28 @@ pub fn list_combined(all: bool, status: Option<&str>, name_only: bool) -> Result
 
     let mut items: Vec<Item> = Vec::new();
 
-    // Add skills
-    for (name, skill) in &config.skills {
-        items.push(Item {
-            item_type: ItemType::Skill,
-            name: name.clone(),
-            enabled: skill.enabled,
-            repository: skill.repository.clone(),
-        });
+    // Add skills (unless --agents flag is set)
+    if !agents_only {
+        for (name, skill) in &config.skills {
+            items.push(Item {
+                item_type: ItemType::Skill,
+                name: name.clone(),
+                enabled: skill.enabled,
+                repository: skill.repository.clone(),
+            });
+        }
     }
 
-    // Add agents
-    for (name, agent) in &config.agents {
-        items.push(Item {
-            item_type: ItemType::Agent,
-            name: name.clone(),
-            enabled: agent.enabled,
-            repository: agent.repository.clone(),
-        });
+    // Add agents (unless --skills flag is set)
+    if !skills_only {
+        for (name, agent) in &config.agents {
+            items.push(Item {
+                item_type: ItemType::Agent,
+                name: name.clone(),
+                enabled: agent.enabled,
+                repository: agent.repository.clone(),
+            });
+        }
     }
 
     // Sort by name (then by type for stability)
@@ -632,12 +636,20 @@ pub fn list_combined(all: bool, status: Option<&str>, name_only: bool) -> Result
         .collect();
 
     if filtered_items.is_empty() {
-        if status.is_some() {
-            println!("No {} skills or agents found.", status.unwrap());
-        } else if all {
-            println!("No skills or agents found.");
+        let type_desc = if skills_only {
+            "skills"
+        } else if agents_only {
+            "agents"
         } else {
-            println!("No enabled skills or agents found.");
+            "skills or agents"
+        };
+
+        if status.is_some() {
+            println!("No {} {} found.", status.unwrap(), type_desc);
+        } else if all {
+            println!("No {} found.", type_desc);
+        } else {
+            println!("No enabled {} found.", type_desc);
             println!();
             println!("{}", style("To see all items use: sm list --all").dim());
         }

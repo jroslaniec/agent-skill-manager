@@ -63,17 +63,25 @@ pub enum Command {
     /// List skills (shortcut for 'skills list')
     #[command(visible_aliases = ["ls"])]
     List {
-        /// Show all skills (enabled and disabled)
-        #[arg(short, long)]
+        /// Show all items (enabled and disabled)
+        #[arg(long)]
         all: bool,
 
         /// Filter by status (enabled or disabled)
         #[arg(long)]
         status: Option<String>,
 
-        /// Show only skill names (one per line)
+        /// Show only names (one per line)
         #[arg(long)]
         name_only: bool,
+
+        /// Show only skills
+        #[arg(short = 's', long)]
+        skills: bool,
+
+        /// Show only agents
+        #[arg(short = 'a', long)]
+        agents: bool,
     },
 
     /// Purge all repositories and skills (full reset)
