@@ -6,3 +6,4 @@
 - Use `resolve_repo_cache_path()` for existing repos (handles legacy paths), `repo_cache_path()` for new clones
 - CLI short flags should be consistent across similar commands (e.g., `-a` means `--all` in all list commands)
 - Determine git source type from URL string: `git@` = SSH, `/` or `file://` = local, otherwise = HTTPS
+- RepoRef::parse() can parse both raw user input and repo_ids stored in config (including `local:` prefixed format)

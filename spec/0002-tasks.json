@@ -16,7 +16,7 @@
       ],
       "priority": 1,
       "passes": true,
-      "notes": ""
+      "notes": "Implemented: Added `local:` prefix parsing in RepoRef::parse() to handle local repo_id format stored in config"
     },
     {
       "id": "BUG-002",
@@ -32,7 +32,7 @@
       ],
       "priority": 2,
       "passes": true,
-      "notes": ""
+      "notes": "Implemented: Fixed add_interactive() to use skill.name instead of skill.full_ref when enabling registered skills"
     },
     {
       "id": "BUG-003",
@@ -47,7 +47,7 @@
       ],
       "priority": 3,
       "passes": true,
-      "notes": ""
+      "notes": "Implemented: Updated error messages in skill_ref.rs, cli.rs, and skill.rs to use generic terms"
     },
     {
       "id": "US-001",
@@ -64,7 +64,7 @@
       ],
       "priority": 4,
       "passes": true,
-      "notes": ""
+      "notes": "Implemented: Changed CLI Add argument to urls: Vec<String>, added add_single() helper, loop with error handling"
     },
     {
       "id": "US-002",
@@ -81,7 +81,7 @@
       ],
       "priority": 5,
       "passes": true,
-      "notes": ""
+      "notes": "Implemented: Changed CLI Delete argument to urls: Vec<String>, added delete_single() helper with summary output"
     },
     {
       "id": "US-003",
@@ -96,7 +96,7 @@
       ],
       "priority": 6,
       "passes": true,
-      "notes": ""
+      "notes": "Implemented: Added agent cleanup to delete_single() using agents_for_repo() and remove_agent_symlinks_from_all_integrations()"
     },
     {
       "id": "US-004",
@@ -111,7 +111,7 @@
       ],
       "priority": 7,
       "passes": true,
-      "notes": ""
+      "notes": "Implemented: Enhanced parse_local() to detect common Unix root directories and auto-correct file:// URLs"
     },
     {
       "id": "US-005",
@@ -126,7 +126,7 @@
       ],
       "priority": 8,
       "passes": true,
-      "notes": ""
+      "notes": "Implemented: Changed colors in list_combined(), manage(), and add_interactive() to use cyan for [skill] and yellow for [agent]"
     },
     {
       "id": "US-006",
@@ -142,7 +142,7 @@
       ],
       "priority": 9,
       "passes": true,
-      "notes": ""
+      "notes": "Implemented: Added scan_for_agents() call in add_interactive(), combined Item struct with ItemType enum"
     },
     {
       "id": "US-007",
@@ -157,7 +157,7 @@
       ],
       "priority": 10,
       "passes": true,
-      "notes": ""
+      "notes": "Implemented: Changed cache_dir() to use dirs::home_dir().join('.cache').join('agent-skill-manager')"
     },
     {
       "id": "US-008",
@@ -174,7 +174,7 @@
       ],
       "priority": 11,
       "passes": true,
-      "notes": ""
+      "notes": "Implemented: Added subagents section, agent discovery docs, all URL format examples, removed 'GitHub only' limitation"
     },
     {
       "id": "US-009",
@@ -190,7 +190,7 @@
       ],
       "priority": 12,
       "passes": true,
-      "notes": ""
+      "notes": "Implemented: Added complete Unreleased section with all new features and bug fixes"
     }
   ]
 }
