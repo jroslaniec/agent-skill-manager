@@ -709,8 +709,8 @@ pub fn list_combined(all: bool, status: Option<&str>, name_only: bool, skills_on
         // Print each item
         for item in filtered_items {
             let type_str = match item.item_type {
-                ItemType::Skill => style("[skill]").blue(),
-                ItemType::Agent => style("[agent]").magenta(),
+                ItemType::Skill => style("[skill]").cyan(),
+                ItemType::Agent => style("[agent]").yellow(),
             };
 
             let status_str = if item.enabled {
@@ -848,13 +848,13 @@ pub fn manage() -> Result<()> {
         })
     });
 
-    // Build options for multi-select with type prefixes
+    // Build options for multi-select with colored type prefixes
     let options: Vec<String> = all_items
         .iter()
         .map(|item| {
             let type_prefix = match item.item_type {
-                ItemType::Skill => "[skill]",
-                ItemType::Agent => "[agent]",
+                ItemType::Skill => style("[skill]").cyan().to_string(),
+                ItemType::Agent => style("[agent]").yellow().to_string(),
             };
             format!("{} {} ({})", type_prefix, item.name, item.repo_id)
         })
@@ -1028,7 +1028,7 @@ fn add_interactive(lock: &ConfigLock, skill_refs: &[String]) -> Result<()> {
         println!("Repository {} already registered", style(&repo_id).cyan());
     }
 
-    // Scan for skills to show in interactive UI
+    // Scan for skills and agents to show in interactive UI
     let scan_path = if repo_ref.path.is_empty() {
         repo_cache_path.clone()
     } else {
@@ -1036,54 +1036,95 @@ fn add_interactive(lock: &ConfigLock, skill_refs: &[String]) -> Result<()> {
     };
 
     let skill_names = scan_for_skills(&scan_path)?;
+    let agent_names = scan_for_agents(&scan_path)?;
 
-    // Build skill items for this repository
+    // Build combined items for this repository
     #[derive(Debug, Clone)]
-    struct SkillItem {
+    enum ItemType {
+        Skill,
+        Agent,
+    }
+
+    #[derive(Debug, Clone)]
+    struct Item {
         name: String,
+        item_type: ItemType,
         enabled: bool,
     }
 
     let config = lock.read_config()?;
-    let mut skills: Vec<SkillItem> = Vec::new();
+    let mut items: Vec<Item> = Vec::new();
 
+    // Add skills
     for skill_name in skill_names {
         let enabled = config.skills.get(&skill_name)
             .map(|s| s.enabled)
             .unwrap_or(false);
 
-        skills.push(SkillItem {
+        items.push(Item {
             name: skill_name,
+            item_type: ItemType::Skill,
             enabled,
         });
     }
 
-    // Sort skills by name
-    skills.sort_by(|a, b| a.name.cmp(&b.name));
+    // Add agents
+    for agent_name in agent_names {
+        let enabled = config.agents.get(&agent_name)
+            .map(|a| a.enabled)
+            .unwrap_or(false);
 
-    // Build options for multi-select
-    let options: Vec<String> = skills
+        items.push(Item {
+            name: agent_name,
+            item_type: ItemType::Agent,
+            enabled,
+        });
+    }
+
+    // Sort items: skills first, then agents, then by name within each type
+    items.sort_by(|a, b| {
+        match (&a.item_type, &b.item_type) {
+            (ItemType::Skill, ItemType::Agent) => std::cmp::Ordering::Less,
+            (ItemType::Agent, ItemType::Skill) => std::cmp::Ordering::Greater,
+            _ => a.name.cmp(&b.name),
+        }
+    });
+
+    // Build options for multi-select with colored type labels
+    let options: Vec<String> = items
         .iter()
-        .map(|s| s.name.clone())
+        .map(|item| {
+            let type_prefix = match item.item_type {
+                ItemType::Skill => style("[skill]").cyan().to_string(),
+                ItemType::Agent => style("[agent]").yellow().to_string(),
+            };
+            format!("{} {}", type_prefix, item.name)
+        })
         .collect();
 
-    // Get indices of currently enabled skills
-    let default_indices: Vec<usize> = skills
+    // Get indices of currently enabled items
+    let default_indices: Vec<usize> = items
         .iter()
         .enumerate()
-        .filter(|(_, s)| s.enabled)
+        .filter(|(_, item)| item.enabled)
         .map(|(i, _)| i)
         .collect();
 
     // Show multi-select prompt
-    let selected = inquire::MultiSelect::new("Select skills:", options.clone())
+    let prompt_text = if items.iter().any(|i| matches!(i.item_type, ItemType::Agent)) {
+        "Select skills and agents:"
+    } else {
+        "Select skills:"
+    };
+
+    let selected = inquire::MultiSelect::new(prompt_text, options.clone())
         .with_default(&default_indices)
         .with_help_message("↑↓ to move, Space to toggle, Enter to save, Esc to cancel")
         .with_formatter(&|_| String::new())
         .without_filtering()
         .prompt();
 
-    let selected_names = match selected {
+    let selected_options = match selected {
         Ok(selections) => selections,
         Err(_) => {
             println!("Cancelled");
@@ -1091,31 +1132,59 @@ fn add_interactive(lock: &ConfigLock, skill_refs: &[String]) -> Result<()> {
         }
     };
 
-    // Determine what changed
-    let mut to_enable: Vec<String> = Vec::new();
-    let mut to_disable: Vec<String> = Vec::new();
+    // Determine what changed by comparing with original items
+    let mut skills_to_enable: Vec<String> = Vec::new();
+    let mut skills_to_disable: Vec<String> = Vec::new();
+    let mut agents_to_enable: Vec<String> = Vec::new();
+    let mut agents_to_disable: Vec<String> = Vec::new();
 
-    for skill in &skills {
-        let should_be_enabled = selected_names.contains(&skill.name);
+    for item in &items {
+        let should_be_enabled = selected_options.contains(
+            &if matches!(item.item_type, ItemType::Skill) {
+                format!("{} {}", style("[skill]").cyan().to_string(), item.name)
+            } else {
+                format!("{} {}", style("[agent]").yellow().to_string(), item.name)
+            }
+        );
 
-        if should_be_enabled && !skill.enabled {
-            to_enable.push(skill.name.clone());
-        } else if !should_be_enabled && skill.enabled {
-            to_disable.push(skill.name.clone());
+        match &item.item_type {
+            ItemType::Skill => {
+                if should_be_enabled && !item.enabled {
+                    skills_to_enable.push(item.name.clone());
+                } else if !should_be_enabled && item.enabled {
+                    skills_to_disable.push(item.name.clone());
+                }
+            }
+            ItemType::Agent => {
+                if should_be_enabled && !item.enabled {
+                    agents_to_enable.push(item.name.clone());
+                } else if !should_be_enabled && item.enabled {
+                    agents_to_disable.push(item.name.clone());
+                }
+            }
         }
     }
 
-    // Apply changes
-    if !to_enable.is_empty() {
-        enable_with_lock(lock, &to_enable)?;
+    // Apply changes for skills
+    if !skills_to_enable.is_empty() {
+        enable_with_lock(lock, &skills_to_enable)?;
     }
 
-    if !to_disable.is_empty() {
-        disable_with_lock(lock, &to_disable)?;
+    if !skills_to_disable.is_empty() {
+        disable_with_lock(lock, &skills_to_disable)?;
+    }
+
+    // Apply changes for agents
+    if !agents_to_enable.is_empty() {
+        subagent::enable_with_lock(lock, &agents_to_enable)?;
+    }
+
+    if !agents_to_disable.is_empty() {
+        subagent::disable_with_lock(lock, &agents_to_disable)?;
     }
 
     // Show summary
-    if to_enable.is_empty() && to_disable.is_empty() {
+    if skills_to_enable.is_empty() && skills_to_disable.is_empty() && agents_to_enable.is_empty() && agents_to_disable.is_empty() {
         println!("No changes made");
     }
 
