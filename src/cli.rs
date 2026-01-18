@@ -102,7 +102,7 @@ pub enum Command {
 pub enum RepoAction {
     /// Add a repository
     Add {
-        /// Repository URL (e.g., github.com/owner/repo or github.com/owner/repo/path)
+        /// Repository URL (e.g., github.com/owner/repo, gitlab.com/owner/repo, or /local/path)
         url: String,
     },
 
@@ -144,13 +144,13 @@ pub enum RepoAction {
 pub enum SkillAction {
     /// Enable one or more skills
     Enable {
-        /// Skill names or references (e.g., "git-commit" or "github.com/owner/repo/git-commit")
+        /// Skill names or references (e.g., "git-commit" or "owner/repo/git-commit")
         skill_names_or_refs: Vec<String>,
     },
 
     /// Disable one or more skills
     Disable {
-        /// Skill names or references (e.g., "git-commit" or "github.com/owner/repo/git-commit")
+        /// Skill names or references (e.g., "git-commit" or "owner/repo/git-commit")
         skill_names_or_refs: Vec<String>,
     },
 
@@ -181,13 +181,13 @@ pub enum CacheAction {
 pub enum SubagentAction {
     /// Enable one or more subagents
     Enable {
-        /// Subagent names or references (e.g., "my-agent" or "github.com/owner/repo/my-agent")
+        /// Subagent names or references (e.g., "my-agent" or "owner/repo/my-agent")
         agent_names_or_refs: Vec<String>,
     },
 
     /// Disable one or more subagents
     Disable {
-        /// Subagent names or references (e.g., "my-agent" or "github.com/owner/repo/my-agent")
+        /// Subagent names or references (e.g., "my-agent" or "owner/repo/my-agent")
         agent_names_or_refs: Vec<String>,
     },
 

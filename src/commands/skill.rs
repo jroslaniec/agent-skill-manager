@@ -49,9 +49,11 @@ pub fn add(skill_refs: &[String], interactive: bool) -> Result<()> {
                     );
                     eprintln!();
                     eprintln!("Skill references should include the skill path, e.g.:");
-                    eprintln!("  github.com/owner/repo/skill-name");
-                    eprintln!("  gitlab.com/owner/repo/skill-name");
-                    eprintln!("  git@github.com:owner/repo.git/skill-name");
+                    eprintln!("  host.com/owner/repo/skill-name");
+                    eprintln!("  git@host.com:owner/repo.git/skill-name");
+                    eprintln!();
+                    eprintln!("Or use interactive mode to select from a repository:");
+                    eprintln!("  sm add -i <repository-url>");
                 }
                 std::process::exit(1);
             }

@@ -37,13 +37,13 @@ impl SkillRef {
             .strip_prefix("https://github.com/")
             .or_else(|| reference.strip_prefix("http://github.com/"))
             .or_else(|| reference.strip_prefix("github.com/"))
-            .context("Not a valid GitHub skill reference. For other git sources, use 'sm add -i <url>' or 'sm repo add <url>'")?;
+            .context("Not a valid skill reference. Use 'sm add -i <url>' or 'sm repo add <url>' to add repositories")?;
 
         // Split into parts
         let parts: Vec<&str> = reference.split('/').collect();
 
         if parts.len() < 3 {
-            bail!("Invalid skill reference: must include a skill path (e.g., github.com/OWNER/REPO/SKILL)");
+            bail!("Invalid skill reference: must include a skill path (e.g., OWNER/REPO/SKILL)");
         }
 
         let owner = parts[0].to_string();

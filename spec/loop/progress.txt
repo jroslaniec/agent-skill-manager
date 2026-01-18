@@ -169,3 +169,43 @@
   - Test edge cases like combined flags when implementing filters
 
 ---
+
+## 2026-01-18 - BUG-001: Fix bare sm command not showing skills from local repos
+
+- What was implemented:
+  - Modified RepoRef::parse() to recognize the `local:` prefix format used for local repository IDs
+  - Added `local:` to the `looks_like_local_path()` function so it's detected as a local path
+  - Updated `parse_local()` to strip the `local:` prefix before processing the path
+  - Added test case `test_parse_local_repo_id_format()` to verify the fix
+
+- Files changed:
+  - src/skill_ref.rs - Added support for parsing `local:` prefix in RepoRef
+
+- **Learnings for future iterations:**
+  - Local repository repo_ids are stored as `local:/path/to/repo` in the config
+  - When the bare `sm` command runs (interactive mode), it iterates through all repos and tries to parse their repo_ids
+  - The `manage()` function in skill.rs needed to parse these local repo_ids to find the actual cache paths
+  - Always ensure that repo_id formats can be round-tripped through parsing
+
+---
+
+## 2026-01-18 - BUG-002: Fix sm add -i with local paths
+
+- What was implemented:
+  - Fixed `add_interactive()` function to use skill names instead of full refs when enabling
+  - The issue was that `to_enable` was populated with `skill.full_ref` (e.g., `local:/path/my-skill`)
+    but `enable_with_lock()` expects either just the skill name (for registered skills) or a
+    GitHub skill reference
+  - Changed line 1103 from `to_enable.push(skill.full_ref.clone())` to `to_enable.push(skill.name.clone())`
+  - Removed the unused `full_ref` field from the SkillItem struct
+
+- Files changed:
+  - src/commands/skill.rs - Fixed add_interactive() to use skill.name instead of skill.full_ref for enabling
+
+- **Learnings for future iterations:**
+  - In add_interactive(), skills are already registered in config during the repo add phase
+  - When enabling registered skills, use just the skill name, not the full repo_id/skill_name reference
+  - The enable and disable paths should be symmetric - disable already used skill.name correctly
+  - SkillRef::parse() is GitHub-specific and doesn't work with local repo references
+
+---
