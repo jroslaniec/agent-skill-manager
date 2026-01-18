@@ -15,6 +15,13 @@ pub fn enable(agent_names_or_refs: &[String]) -> Result<()> {
 }
 
 pub fn enable_with_lock(lock: &ConfigLock, agent_names_or_refs: &[String]) -> Result<()> {
+    // Migrate integration configs to add missing agents_dir for built-in integrations
+    // This handles configs created before agent support was added
+    lock.update(|config| {
+        config.migrate_integration_agents_dirs();
+        Ok(())
+    })?;
+
     for agent_name_or_ref in agent_names_or_refs {
         let config = lock.read_config()?;
 

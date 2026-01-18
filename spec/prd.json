@@ -309,8 +309,8 @@
         "cargo test passes"
       ],
       "priority": 20,
-      "passes": false,
-      "notes": "BUG: Severity high. Repro: Have GitHub repo cloned before universal git support, run 'sm upgrade', confirm 'yes' - fails with 'Failed to execute git fetch command'. Root cause: Cache path changed from git/{owner}/{repo} to git/{host}/{owner}/{repo}. repo_cache_path() doesn't check legacy paths. Affected: src/paths.rs, src/commands/repo.rs"
+      "passes": true,
+      "notes": "Fixed: Added resolve_repo_cache_path() that checks both new-style (git/{host}/{owner}/{repo}) and legacy (git/{owner}/{repo}) paths. Updated upgrade_with_lock() and pin() to use this function. 85 tests pass."
     },
     {
       "id": "US-021",
@@ -323,8 +323,8 @@
         "cargo test passes"
       ],
       "priority": 21,
-      "passes": false,
-      "notes": "BUG: Severity high. Repro: Have integration added before agent support (config.toml only has skills_dir, no agents_dir), add repo with agents, enable agent - 'ls ~/.claude/agents/' shows empty despite agent 'enabled'. Root cause: Integration config missing agents_dir, subagent enable skips integrations without agents_dir. Affected: src/commands/integration.rs, src/config/state.rs"
+      "passes": true,
+      "notes": "Fixed: Added migrate_integration_agents_dirs() method to Config that auto-populates agents_dir for built-in integrations. Called in enable_with_lock() before creating symlinks. 5 new tests added, 89 total tests pass."
     },
     {
       "id": "US-022",

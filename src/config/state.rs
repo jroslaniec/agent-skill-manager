@@ -261,6 +261,40 @@ impl Config {
             .filter(|(_, skill)| skill.enabled)
             .collect()
     }
+
+    /// Migrate existing integrations to add missing agents_dir for built-in integrations
+    ///
+    /// This handles the case where users added integrations before agent support was added.
+    /// Built-in integrations that have known agents directories will have them added
+    /// if they're missing from the config.
+    ///
+    /// Returns true if any changes were made.
+    pub fn migrate_integration_agents_dirs(&mut self) -> bool {
+        use crate::paths;
+
+        let mut changed = false;
+
+        // Get the built-in integrations with their default agents directories
+        let builtins = paths::builtin_integrations();
+
+        for bi in builtins {
+            // Skip if no agents_dir defined for this integration
+            let default_agents_dir = match bi.agents_dir {
+                Some(dir) => dir,
+                None => continue,
+            };
+
+            // Check if this integration exists in config but is missing agents_dir
+            if let Some(integration) = self.integrations.get_mut(bi.name) {
+                if integration.agents_dir.is_none() {
+                    integration.agents_dir = Some(default_agents_dir.to_string());
+                    changed = true;
+                }
+            }
+        }
+
+        changed
+    }
 }
 
 #[cfg(test)]
@@ -477,5 +511,85 @@ enabled_at = "2024-01-01T00:00:00Z"
         let integration = parsed.integrations.get("agents-only").unwrap();
         assert!(integration.skills_dir.is_none());
         assert_eq!(integration.agents_dir, Some("/home/user/.agents".to_string()));
+    }
+
+    #[test]
+    fn test_migrate_integration_agents_dirs_builtin() {
+        // Simulate a config from before agent support was added
+        let toml_str = r#"
+[integrations.claude-code]
+skills_dir = "/home/user/.claude/skills"
+enabled_at = "2024-01-01T00:00:00Z"
+"#;
+        let mut config = Config::from_toml(toml_str).unwrap();
+
+        // Before migration: agents_dir should be None
+        let integration = config.integrations.get("claude-code").unwrap();
+        assert!(integration.agents_dir.is_none());
+
+        // Run migration
+        let changed = config.migrate_integration_agents_dirs();
+        assert!(changed);
+
+        // After migration: agents_dir should be set to the default
+        let integration = config.integrations.get("claude-code").unwrap();
+        assert_eq!(integration.agents_dir, Some("~/.claude/agents".to_string()));
+    }
+
+    #[test]
+    fn test_migrate_integration_agents_dirs_preserves_existing() {
+        // Config that already has agents_dir set should not be changed
+        let mut config = Config::new();
+        config.add_integration(
+            "claude-code".to_string(),
+            Some("/custom/skills".to_string()),
+            Some("/custom/agents".to_string()),  // Custom agents path
+        );
+
+        // Run migration
+        let changed = config.migrate_integration_agents_dirs();
+        assert!(!changed);
+
+        // Should preserve the custom path
+        let integration = config.integrations.get("claude-code").unwrap();
+        assert_eq!(integration.agents_dir, Some("/custom/agents".to_string()));
+    }
+
+    #[test]
+    fn test_migrate_integration_agents_dirs_skips_codex() {
+        // Codex doesn't support individual agent files (uses AGENTS.md)
+        let toml_str = r#"
+[integrations.codex]
+skills_dir = "/home/user/.codex/skills"
+enabled_at = "2024-01-01T00:00:00Z"
+"#;
+        let mut config = Config::from_toml(toml_str).unwrap();
+
+        // Run migration
+        let changed = config.migrate_integration_agents_dirs();
+        assert!(!changed);
+
+        // agents_dir should remain None for codex
+        let integration = config.integrations.get("codex").unwrap();
+        assert!(integration.agents_dir.is_none());
+    }
+
+    #[test]
+    fn test_migrate_integration_agents_dirs_custom_integration() {
+        // Custom integrations (not built-in) should not be affected
+        let mut config = Config::new();
+        config.add_integration(
+            "my-custom".to_string(),
+            Some("/custom/skills".to_string()),
+            None,  // No agents_dir
+        );
+
+        // Run migration
+        let changed = config.migrate_integration_agents_dirs();
+        assert!(!changed);
+
+        // Custom integration should not get agents_dir added
+        let integration = config.integrations.get("my-custom").unwrap();
+        assert!(integration.agents_dir.is_none());
     }
 }

@@ -1,3 +1,48 @@
+## 2026-01-18 - US-018
+- Added integration tests for universal git sources
+- Files changed:
+  - `src/lib.rs` - Added integration_tests module with 6 comprehensive tests
+- **Tests implemented:**
+  - test_integration_clone_local_path_to_cache - verifies local repo cloning to cache
+  - test_integration_skill_enable_creates_directory_symlink - verifies skill symlinks are directories
+  - test_integration_agent_enable_creates_file_symlink_with_md_extension - verifies agent symlinks are files with .md extension
+  - test_integration_skill_vs_agent_symlink_structure - verifies structural differences between skill/agent symlinks
+  - test_integration_scan_discovers_both_skills_and_agents - verifies scan functions find correct items
+  - test_integration_list_type_filters - verifies --skills and --agents filter logic
+- **All acceptance criteria met:**
+  - Integration test: clone from local path to cache ✓
+  - Integration test: enable skill creates directory symlink ✓
+  - Integration test: enable agent creates file symlink with .md extension ✓
+  - Integration test: list shows both types with filters ✓
+  - cargo test passes (81 tests) ✓
+- **Learnings for future iterations:**
+  - Integration tests belong in lib.rs when they need to test interactions between multiple modules
+  - create_skill_symlink() is public and can be reused in tests
+  - Agent symlinks differ from skill symlinks: agents point to AGENT.md file, skills point to directory
+  - Helper functions can be defined locally in test modules to avoid exposing internal scan functions
+
+---
+
+## 2026-01-18 - US-017
+- Verified sm integrations list already shows agents directory (implemented in US-006)
+- Files verified:
+  - `src/commands/integration.rs` - list() function at lines 224-304
+- **Verification performed:**
+  - list() shows both "SKILLS DIRECTORY" and "AGENTS DIRECTORY" columns in header
+  - Registered integrations show both directories
+  - Non-registered built-in integrations show defaults dimmed
+  - Custom integrations show both directories
+  - Missing directories show "-" appropriately
+  - Tested adding custom integrations with only skills_dir, only agents_dir, and both
+  - cargo build passes
+  - cargo test passes (75 tests)
+- **Learnings for future iterations:**
+  - Some user stories may already be implemented as side effects of earlier stories
+  - US-006 (Integration model update) included the list() UI changes as well as data model changes
+  - Always verify acceptance criteria are met before marking as pass
+
+---
+
 ## Codebase Patterns
 - RepoRef now uses `repo_id` (field) instead of `repo_id()` (method)
 - RepoRef now uses `clone_url()` method or `git_url` field instead of `git_url()` method
@@ -12,9 +57,89 @@
 - BuiltinIntegration struct in paths.rs has name, skills_dir (Option), agents_dir (Option)
 - Use `scan_for_agents()` alongside `scan_for_skills()` to discover both types during repo add/upgrade
 - When reconciling agents in upgrade, use `reconcile_agents()` parallel to `reconcile_skills()`
+- Integration tests go in lib.rs when testing interactions between multiple modules (git, paths, commands)
+- create_skill_symlink() is public for testing; uses unix_fs::symlink for directory symlinks
+- Agent symlinks: FILE symlinks with .md extension pointing to AGENT.md
+- Skill symlinks: directory symlinks pointing to skill folder (no .md extension)
 - CLI subcommand groups follow pattern: SubagentAction enum mirrors SkillAction, handlers go in commands/subagent.rs
 - Agent symlinks are FILE symlinks: `{agents_dir}/{name}.md` -> `cached/path/AGENT.md` (unlike skills which are directory symlinks)
 - Use `paths::expand_tilde()` when working with user-provided directory paths (like agents_dir from config)
+- Repository struct uses `url` and `path` fields (not `git_url` and `base_path`)
+- Interactive mode (manage()) uses subagent::enable_with_lock() and subagent::disable_with_lock() for agent operations
+
+---
+
+## 2026-01-18 - US-016
+- Added --agents-path flag to sm integrations add command
+- Files changed:
+  - `src/cli.rs` - Added agents_path field to IntegrationAction::Add
+  - `src/main.rs` - Updated handler to pass agents_path argument
+  - `src/commands/integration.rs` - Updated add() to accept and use custom_agents_path parameter
+- **Changes made:**
+  - New `--agents-path` flag allows users to specify custom agents directory for custom integrations
+  - Updated add() function to handle 4 cases: both paths, skills only, agents only, or neither (use built-in)
+  - Error message updated to mention both --path and --agents-path flags
+  - Updated internal call in configure() to pass new parameter
+  - 75 tests pass
+- **Learnings for future iterations:**
+  - When adding new CLI flags, ensure all call sites are updated (add() is called from both main.rs and configure())
+  - Match tuple patterns handle multiple optional parameters cleanly
+
+---
+
+## 2026-01-18 - US-015
+- Updated interactive mode (sm) to display both skills and agents
+- Files changed:
+  - `src/commands/skill.rs` - Updated manage() function, added scan_for_agents()
+  - `src/commands/subagent.rs` - Made enable_with_lock() and disable_with_lock() public
+- **Changes made:**
+  - manage() now scans for both skills and agents from repositories
+  - Items displayed with [skill]/[agent] type prefixes
+  - Items sorted by name, then by type for stable ordering
+  - Toggling uses appropriate enable/disable functions (skill vs agent)
+  - Agent toggling creates file symlinks, skill toggling creates directory symlinks
+  - 75 tests pass
+- **Learnings for future iterations:**
+  - Repository struct uses `url` and `path` fields (not `git_url` and `base_path`)
+  - Import subagent module with `use crate::commands::subagent` for cross-module function calls
+  - Make `_with_lock` functions public when they need to be called from other modules holding the lock
+
+---
+
+## 2026-01-18 - US-014
+- Removed sm enable/disable shortcut commands to require explicit skill/agent specification
+- Files changed:
+  - `src/cli.rs` - Removed Enable/Disable command variants from Command enum
+  - `src/main.rs` - Removed Enable/Disable handlers from match statement
+- **Changes made:**
+  - Removed `sm enable` shortcut (users must now use `sm skills enable`)
+  - Removed `sm disable` shortcut (users must now use `sm skills disable`)
+  - Updated List command description to "List all items (skills and subagents)"
+  - 75 tests pass
+- **Learnings for future iterations:**
+  - CLI shortcuts that become ambiguous with new features should be removed
+  - Users can still use subcommand-specific enable/disable via `sm skills enable` and `sm subagents enable`
+  - Simple refactoring like removing commands requires changes to both cli.rs (enum definition) and main.rs (handlers)
+
+---
+
+## 2026-01-18 - US-013
+- Implemented type filters for sm list command (--skills/-s and --agents/-a)
+- Files changed:
+  - `src/cli.rs` - Added --skills and --agents flags to List command
+  - `src/commands/skill.rs` - Updated list_combined() to accept and use filter parameters
+  - `src/main.rs` - Updated Command::List handler to pass filter flags
+- **Changes made:**
+  - Added `--skills` (`-s`) flag to show only skills
+  - Added `--agents` (`-a`) flag to show only agents
+  - Removed `-a` short flag from `--all` to avoid conflict with `--agents`
+  - Filters work with `--all` flag for showing all items of a specific type
+  - Updated empty result messages to reflect the filter type
+  - 75 tests pass
+- **Learnings for future iterations:**
+  - When adding new short flags, check for conflicts with existing flags (like `-a` for `--all`)
+  - Type filters should exclude the opposite type from collection, not filter after collection
+  - Empty message formatting should reflect the active type filter
 
 ---
 
