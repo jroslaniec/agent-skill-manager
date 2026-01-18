@@ -483,24 +483,24 @@ mod tests {
 
     #[test]
     fn test_parse_skill_ref() {
-        let skill = SkillRef::parse("github.com/jroslaniec/agent-skills/git-commit").unwrap();
-        assert_eq!(skill.owner, "jroslaniec");
-        assert_eq!(skill.repo, "agent-skills");
+        let skill = SkillRef::parse("github.com/testowner/test-skills/git-commit").unwrap();
+        assert_eq!(skill.owner, "testowner");
+        assert_eq!(skill.repo, "test-skills");
         assert_eq!(skill.path, "git-commit");
         assert_eq!(skill.skill_name, "git-commit");
     }
 
     #[test]
     fn test_parse_skill_ref_with_skill_md() {
-        let skill = SkillRef::parse("github.com/jroslaniec/agent-skills/git-commit/SKILL.md").unwrap();
+        let skill = SkillRef::parse("github.com/testowner/test-skills/git-commit/SKILL.md").unwrap();
         assert_eq!(skill.path, "git-commit");
         assert_eq!(skill.skill_name, "git-commit");
     }
 
     #[test]
     fn test_parse_nested_skill() {
-        let skill = SkillRef::parse("github.com/jroslaniec/nested/directory/my-skill").unwrap();
-        assert_eq!(skill.owner, "jroslaniec");
+        let skill = SkillRef::parse("github.com/testowner/nested/directory/my-skill").unwrap();
+        assert_eq!(skill.owner, "testowner");
         assert_eq!(skill.repo, "nested");
         assert_eq!(skill.path, "directory/my-skill");
         assert_eq!(skill.skill_name, "my-skill");
@@ -510,104 +510,104 @@ mod tests {
 
     #[test]
     fn test_parse_repo_ref_github() {
-        let repo = RepoRef::parse("github.com/jroslaniec/agent-skills").unwrap();
+        let repo = RepoRef::parse("github.com/testowner/test-skills").unwrap();
         assert_eq!(repo.source_type, GitSourceType::Https);
-        assert_eq!(repo.repo_id, "github.com/jroslaniec/agent-skills");
-        assert_eq!(repo.git_url, "https://github.com/jroslaniec/agent-skills.git");
+        assert_eq!(repo.repo_id, "github.com/testowner/test-skills");
+        assert_eq!(repo.git_url, "https://github.com/testowner/test-skills.git");
         assert_eq!(repo.path, "");
         assert_eq!(repo.sha, None);
     }
 
     #[test]
     fn test_parse_repo_ref_github_with_https() {
-        let repo = RepoRef::parse("https://github.com/jroslaniec/agent-skills").unwrap();
+        let repo = RepoRef::parse("https://github.com/testowner/test-skills").unwrap();
         assert_eq!(repo.source_type, GitSourceType::Https);
-        assert_eq!(repo.repo_id, "github.com/jroslaniec/agent-skills");
+        assert_eq!(repo.repo_id, "github.com/testowner/test-skills");
     }
 
     #[test]
     fn test_parse_repo_ref_github_with_git_suffix() {
-        let repo = RepoRef::parse("https://github.com/jroslaniec/agent-skills.git").unwrap();
+        let repo = RepoRef::parse("https://github.com/testowner/test-skills.git").unwrap();
         assert_eq!(repo.source_type, GitSourceType::Https);
-        assert_eq!(repo.repo_id, "github.com/jroslaniec/agent-skills");
-        assert_eq!(repo.git_url, "https://github.com/jroslaniec/agent-skills.git");
+        assert_eq!(repo.repo_id, "github.com/testowner/test-skills");
+        assert_eq!(repo.git_url, "https://github.com/testowner/test-skills.git");
     }
 
     #[test]
     fn test_parse_repo_ref_gitlab() {
-        let repo = RepoRef::parse("gitlab.com/myteam/agent-skills").unwrap();
+        let repo = RepoRef::parse("gitlab.com/testteam/test-skills").unwrap();
         assert_eq!(repo.source_type, GitSourceType::Https);
-        assert_eq!(repo.repo_id, "gitlab.com/myteam/agent-skills");
-        assert_eq!(repo.git_url, "https://gitlab.com/myteam/agent-skills.git");
+        assert_eq!(repo.repo_id, "gitlab.com/testteam/test-skills");
+        assert_eq!(repo.git_url, "https://gitlab.com/testteam/test-skills.git");
     }
 
     #[test]
     fn test_parse_repo_ref_gitlab_with_https() {
-        let repo = RepoRef::parse("https://gitlab.com/j.roslaniec/agentfiles.git").unwrap();
+        let repo = RepoRef::parse("https://gitlab.com/test.user/testfiles.git").unwrap();
         assert_eq!(repo.source_type, GitSourceType::Https);
-        assert_eq!(repo.repo_id, "gitlab.com/j.roslaniec/agentfiles");
-        assert_eq!(repo.git_url, "https://gitlab.com/j.roslaniec/agentfiles.git");
+        assert_eq!(repo.repo_id, "gitlab.com/test.user/testfiles");
+        assert_eq!(repo.git_url, "https://gitlab.com/test.user/testfiles.git");
     }
 
     #[test]
     fn test_parse_repo_ref_bitbucket() {
-        let repo = RepoRef::parse("bitbucket.org/team/project").unwrap();
+        let repo = RepoRef::parse("bitbucket.org/testteam/testproject").unwrap();
         assert_eq!(repo.source_type, GitSourceType::Https);
-        assert_eq!(repo.repo_id, "bitbucket.org/team/project");
+        assert_eq!(repo.repo_id, "bitbucket.org/testteam/testproject");
     }
 
     #[test]
     fn test_parse_repo_ref_self_hosted() {
-        let repo = RepoRef::parse("https://git.company.com/my-repo.git").unwrap();
+        let repo = RepoRef::parse("https://git.example.com/test-repo.git").unwrap();
         assert_eq!(repo.source_type, GitSourceType::Https);
-        assert_eq!(repo.repo_id, "git.company.com/my-repo");
+        assert_eq!(repo.repo_id, "git.example.com/test-repo");
     }
 
     #[test]
     fn test_parse_repo_ref_with_path() {
-        let repo = RepoRef::parse("github.com/jroslaniec/agent-skills/nested/skills").unwrap();
-        assert_eq!(repo.repo_id, "github.com/jroslaniec/agent-skills");
+        let repo = RepoRef::parse("github.com/testowner/test-skills/nested/skills").unwrap();
+        assert_eq!(repo.repo_id, "github.com/testowner/test-skills");
         assert_eq!(repo.path, "nested/skills");
     }
 
     #[test]
     fn test_parse_repo_ref_with_git_and_path() {
-        let repo = RepoRef::parse("https://github.com/owner/repo.git/subdir").unwrap();
-        assert_eq!(repo.repo_id, "github.com/owner/repo");
+        let repo = RepoRef::parse("https://github.com/testowner/testrepo.git/subdir").unwrap();
+        assert_eq!(repo.repo_id, "github.com/testowner/testrepo");
         assert_eq!(repo.path, "subdir");
     }
 
     #[test]
     fn test_parse_repo_ref_with_sha() {
-        let repo = RepoRef::parse("github.com/jroslaniec/agent-skills@489c9d85").unwrap();
-        assert_eq!(repo.repo_id, "github.com/jroslaniec/agent-skills");
+        let repo = RepoRef::parse("github.com/testowner/test-skills@489c9d85").unwrap();
+        assert_eq!(repo.repo_id, "github.com/testowner/test-skills");
         assert_eq!(repo.sha, Some("489c9d85".to_string()));
     }
 
     #[test]
     fn test_parse_repo_ref_with_full_sha() {
-        let repo = RepoRef::parse("github.com/jroslaniec/agent-skills@489c9d85c422a184feb9f56dc7e60e4af721a131").unwrap();
+        let repo = RepoRef::parse("github.com/testowner/test-skills@489c9d85c422a184feb9f56dc7e60e4af721a131").unwrap();
         assert_eq!(repo.sha, Some("489c9d85c422a184feb9f56dc7e60e4af721a131".to_string()));
     }
 
     #[test]
     fn test_parse_repo_ref_with_path_and_sha() {
-        let repo = RepoRef::parse("github.com/anthropics/skills/skills@abc12345").unwrap();
-        assert_eq!(repo.repo_id, "github.com/anthropics/skills");
+        let repo = RepoRef::parse("github.com/testorg/skills/skills@abc12345").unwrap();
+        assert_eq!(repo.repo_id, "github.com/testorg/skills");
         assert_eq!(repo.path, "skills");
         assert_eq!(repo.sha, Some("abc12345".to_string()));
     }
 
     #[test]
     fn test_parse_repo_ref_invalid_sha_too_short() {
-        let result = RepoRef::parse("github.com/owner/repo@abc");
+        let result = RepoRef::parse("github.com/testowner/testrepo@abc");
         assert!(result.is_err());
     }
 
     #[test]
     fn test_parse_repo_ref_invalid_sha_non_hex() {
         // This should actually pass now since we support tags like v1.0.0
-        let result = RepoRef::parse("github.com/owner/repo@v1.0.0");
+        let result = RepoRef::parse("github.com/testowner/testrepo@v1.0.0");
         assert!(result.is_ok());
     }
 
@@ -615,42 +615,42 @@ mod tests {
 
     #[test]
     fn test_parse_ssh_github() {
-        let repo = RepoRef::parse("git@github.com:owner/repo.git").unwrap();
+        let repo = RepoRef::parse("git@github.com:testowner/testrepo.git").unwrap();
         assert_eq!(repo.source_type, GitSourceType::Ssh);
-        assert_eq!(repo.repo_id, "github.com/owner/repo");
-        assert_eq!(repo.git_url, "git@github.com:owner/repo.git");
+        assert_eq!(repo.repo_id, "github.com/testowner/testrepo");
+        assert_eq!(repo.git_url, "git@github.com:testowner/testrepo.git");
         assert_eq!(repo.path, "");
     }
 
     #[test]
     fn test_parse_ssh_gitlab() {
-        let repo = RepoRef::parse("git@gitlab.com:j.roslaniec/agentfiles.git").unwrap();
+        let repo = RepoRef::parse("git@gitlab.com:test.user/testfiles.git").unwrap();
         assert_eq!(repo.source_type, GitSourceType::Ssh);
-        assert_eq!(repo.repo_id, "gitlab.com/j.roslaniec/agentfiles");
-        assert_eq!(repo.git_url, "git@gitlab.com:j.roslaniec/agentfiles.git");
+        assert_eq!(repo.repo_id, "gitlab.com/test.user/testfiles");
+        assert_eq!(repo.git_url, "git@gitlab.com:test.user/testfiles.git");
     }
 
     #[test]
     fn test_parse_ssh_gitlab_group() {
-        let repo = RepoRef::parse("git@gitlab.com:group/subgroup/repo.git").unwrap();
+        let repo = RepoRef::parse("git@gitlab.com:testgroup/subgroup/testrepo.git").unwrap();
         assert_eq!(repo.source_type, GitSourceType::Ssh);
-        assert_eq!(repo.repo_id, "gitlab.com/group/subgroup/repo");
-        assert_eq!(repo.git_url, "git@gitlab.com:group/subgroup/repo.git");
+        assert_eq!(repo.repo_id, "gitlab.com/testgroup/subgroup/testrepo");
+        assert_eq!(repo.git_url, "git@gitlab.com:testgroup/subgroup/testrepo.git");
     }
 
     #[test]
     fn test_parse_ssh_with_path() {
-        let repo = RepoRef::parse("git@github.com:owner/repo.git/skills").unwrap();
+        let repo = RepoRef::parse("git@github.com:testowner/testrepo.git/skills").unwrap();
         assert_eq!(repo.source_type, GitSourceType::Ssh);
-        assert_eq!(repo.repo_id, "github.com/owner/repo");
+        assert_eq!(repo.repo_id, "github.com/testowner/testrepo");
         assert_eq!(repo.path, "skills");
     }
 
     #[test]
     fn test_parse_ssh_with_sha() {
-        let repo = RepoRef::parse("git@github.com:owner/repo.git@abc12345").unwrap();
+        let repo = RepoRef::parse("git@github.com:testowner/testrepo.git@abc12345").unwrap();
         assert_eq!(repo.source_type, GitSourceType::Ssh);
-        assert_eq!(repo.repo_id, "github.com/owner/repo");
+        assert_eq!(repo.repo_id, "github.com/testowner/testrepo");
         assert_eq!(repo.sha, Some("abc12345".to_string()));
     }
 
@@ -722,29 +722,29 @@ mod tests {
         assert!(RepoRef::looks_like_local_path("../parent"));
         assert!(RepoRef::looks_like_local_path("file:///path"));
 
-        assert!(!RepoRef::looks_like_local_path("github.com/owner/repo"));
-        assert!(!RepoRef::looks_like_local_path("https://github.com/owner/repo"));
-        assert!(!RepoRef::looks_like_local_path("git@github.com:owner/repo.git"));
+        assert!(!RepoRef::looks_like_local_path("github.com/testowner/testrepo"));
+        assert!(!RepoRef::looks_like_local_path("https://github.com/testowner/testrepo"));
+        assert!(!RepoRef::looks_like_local_path("git@github.com:testowner/testrepo.git"));
     }
 
     #[test]
     fn test_clone_url() {
-        let https = RepoRef::parse("github.com/owner/repo").unwrap();
-        assert_eq!(https.clone_url(), "https://github.com/owner/repo.git");
+        let https = RepoRef::parse("github.com/testowner/testrepo").unwrap();
+        assert_eq!(https.clone_url(), "https://github.com/testowner/testrepo.git");
 
-        let ssh = RepoRef::parse("git@github.com:owner/repo.git").unwrap();
-        assert_eq!(ssh.clone_url(), "git@github.com:owner/repo.git");
+        let ssh = RepoRef::parse("git@github.com:testowner/testrepo.git").unwrap();
+        assert_eq!(ssh.clone_url(), "git@github.com:testowner/testrepo.git");
 
-        let local = RepoRef::parse("/Users/dev/repo").unwrap();
-        assert_eq!(local.clone_url(), "/Users/dev/repo");
+        let local = RepoRef::parse("/Users/dev/testrepo").unwrap();
+        assert_eq!(local.clone_url(), "/Users/dev/testrepo");
     }
 
     #[test]
     fn test_full_ref() {
-        let repo = RepoRef::parse("github.com/owner/repo/subdir").unwrap();
-        assert_eq!(repo.full_ref(), "github.com/owner/repo/subdir");
+        let repo = RepoRef::parse("github.com/testowner/testrepo/subdir").unwrap();
+        assert_eq!(repo.full_ref(), "github.com/testowner/testrepo/subdir");
 
-        let repo_no_path = RepoRef::parse("github.com/owner/repo").unwrap();
-        assert_eq!(repo_no_path.full_ref(), "github.com/owner/repo");
+        let repo_no_path = RepoRef::parse("github.com/testowner/testrepo").unwrap();
+        assert_eq!(repo_no_path.full_ref(), "github.com/testowner/testrepo");
     }
 }
