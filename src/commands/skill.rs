@@ -769,7 +769,6 @@ pub fn manage() -> Result<()> {
     }
 
     let mut all_items: Vec<Item> = Vec::new();
-    let git_cache = paths::git_cache_dir()?;
 
     for (repo_id, repo_info) in &config.repositories {
         // Parse repo reference to get cache path
@@ -784,7 +783,8 @@ pub fn manage() -> Result<()> {
             }
         };
 
-        let repo_cache_path = git_cache.join(repo_ref.cache_path());
+        // Use resolve_repo_cache_path to check both new-style and legacy paths
+        let repo_cache_path = paths::resolve_repo_cache_path(&repo_ref)?;
         if !repo_cache_path.exists() {
             continue;
         }

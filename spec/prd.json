@@ -337,8 +337,8 @@
         "cargo test passes"
       ],
       "priority": 22,
-      "passes": false,
-      "notes": "BUG: Severity medium. Repro: Have repo cloned before universal git support, run 'sm' - skills may not appear. Root cause: Same as US-020 - manage() uses repo_cache_path() generating new-style paths, but old repos at old-style paths. Affected: src/commands/skill.rs"
+      "passes": true,
+      "notes": "Fixed: Updated manage() to use paths::resolve_repo_cache_path() which checks both new-style and legacy cache paths."
     },
     {
       "id": "US-023",
