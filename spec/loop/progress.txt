@@ -380,3 +380,27 @@
   - All derived paths (config_path, git_cache_dir) automatically use the standardized cache location
 
 ---
+
+## 2026-01-18 - US-008: Update README documentation
+
+- What was implemented:
+  - Removed "Only GitHub repositories are supported" limitation text
+  - Added documentation for subagents command group (enable, disable, list)
+  - Documented agent discovery with AGENT.md files
+  - Added examples for all repository sources:
+    - HTTPS: github.com, gitlab.com, any self-hosted git server
+    - SSH: git@github.com:owner/repo.git format
+    - Local paths: /absolute, ~/home-relative, ./current-relative, file:///
+  - Updated repository structure examples to include both skills and agents
+  - Added command aliases section for subagents
+  - Removed outdated TODO about supporting other git platforms
+
+- Files changed:
+  - README.md - Major updates to document all new features
+
+- **Learnings for future iterations:**
+  - README should explicitly document all supported URL formats with examples
+  - When adding new entity types (agents), update all relevant documentation including aliases
+  - Remove "GitHub only" language when feature support becomes universal
+
+---
