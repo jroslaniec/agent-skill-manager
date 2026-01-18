@@ -33,9 +33,6 @@ fn main() {
             CacheAction::Dir => commands::cache::dir(),
         },
         Some(Command::Add { interactive, skill_refs }) => commands::skill::add(&skill_refs, interactive),
-        // Shortcuts for skill commands
-        Some(Command::Enable { skill_names_or_refs }) => commands::skill::enable(&skill_names_or_refs),
-        Some(Command::Disable { skill_names_or_refs }) => commands::skill::disable(&skill_names_or_refs),
         Some(Command::List { all, status, name_only, skills, agents }) => {
             commands::skill::list_combined(all, status.as_deref(), name_only, skills, agents)
         }

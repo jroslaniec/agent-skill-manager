@@ -48,19 +48,7 @@ pub enum Command {
         skill_refs: Vec<String>,
     },
 
-    /// Enable one or more skills (shortcut for 'skills enable')
-    Enable {
-        /// Skill names or references (e.g., "git-commit" or "github.com/owner/repo/git-commit")
-        skill_names_or_refs: Vec<String>,
-    },
-
-    /// Disable one or more skills (shortcut for 'skills disable')
-    Disable {
-        /// Skill names or references (e.g., "git-commit" or "github.com/owner/repo/git-commit")
-        skill_names_or_refs: Vec<String>,
-    },
-
-    /// List skills (shortcut for 'skills list')
+    /// List all items (skills and subagents)
     #[command(visible_aliases = ["ls"])]
     List {
         /// Show all items (enabled and disabled)
