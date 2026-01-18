@@ -1,0 +1,23 @@
+## Codebase Patterns
+- RepoRef now uses `repo_id` (field) instead of `repo_id()` (method)
+- RepoRef now uses `clone_url()` method or `git_url` field instead of `git_url()` method
+- Use `repo_ref.cache_path()` to get the path where a repo should be cached
+- For conflict checking with remote repos, extract base repo ID with `repo_id.split('/').take(3).collect::<Vec<_>>().join("/")`
+- Local paths use `local:` prefix in repo_id, remote use `host/path` format
+
+---
+
+## 2026-01-18 - US-001
+- Implemented universal git URL parsing in skill_ref.rs
+- Files changed:
+  - `src/skill_ref.rs` - Major refactor of RepoRef to support HTTPS, SSH, and local paths
+  - `src/commands/repo.rs` - Updated to use new RepoRef API
+  - `src/commands/skill.rs` - Updated to use new RepoRef API
+  - `src/commands/integration.rs` - Updated to use new RepoRef API
+  - `CHANGELOG.md` - Added documentation of the new feature
+- **Learnings for future iterations:**
+  - The RepoRef struct changed significantly - no more `owner` and `repo` fields, instead use `repo_id`, `git_url`, `source_type`
+  - Cache paths are now generated via `cache_path()` method which handles different source types
+  - Conflict checking logic is only needed for remote repos (local paths are always unique)
+  - All 32 tests pass including new tests for GitLab, SSH, and local path parsing
+---

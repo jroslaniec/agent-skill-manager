@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Added
+
+- **Universal git support** - Repository references now support any git source
+  - HTTPS URLs from any domain (GitLab, Bitbucket, self-hosted servers)
+  - SSH URLs (`git@host:owner/repo.git` format)
+  - Local filesystem paths (absolute, relative, ~-prefixed)
+  - Tag and commit references with `@tag` or `@sha` suffix
+
 ## Version 0.0.3 (2026-01-16)
 
 - **Multi-integration support** - Skills can now be enabled for multiple coding agents simultaneously

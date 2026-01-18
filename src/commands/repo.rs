@@ -15,39 +15,41 @@ pub fn add(url: &str) -> Result<()> {
 
     // Check if repository already exists
     let config = lock.read_config()?;
-    if config.has_repository(&repo_ref.repo_id()) {
+    if config.has_repository(&repo_ref.repo_id) {
         bail!(
             "Repository '{}' is already registered. Use 'sm repo list' to see all repositories.",
-            repo_ref.repo_id()
+            repo_ref.repo_id
         );
     }
 
     // Check for conflicts with same git repo, different path
-    let git_repo_key = format!("{}/{}", repo_ref.owner, repo_ref.repo);
-    for (existing_repo_id, _) in &config.repositories {
-        if existing_repo_id.starts_with(&format!("github.com/{}", git_repo_key))
-            && existing_repo_id != &repo_ref.repo_id() {
-            bail!(
-                "Cannot add {}. A different path from the same git repository is already registered: {}\nOnly one skill repository per git repository is allowed.",
-                repo_ref.repo_id(),
-                existing_repo_id
-            );
+    // Only check for remote repos - local paths are always unique
+    if repo_ref.source_type != crate::skill_ref::GitSourceType::Local {
+        // Extract the base repo (without subpath) for conflict checking
+        let base_repo_id = repo_ref.repo_id.split('/').take(3).collect::<Vec<_>>().join("/");
+        for (existing_repo_id, _) in &config.repositories {
+            if existing_repo_id.starts_with(&base_repo_id)
+                && existing_repo_id != &repo_ref.repo_id {
+                bail!(
+                    "Cannot add {}. A different path from the same git repository is already registered: {}\nOnly one skill repository per git repository is allowed.",
+                    repo_ref.repo_id,
+                    existing_repo_id
+                );
+            }
         }
     }
 
     // Determine where to clone the repo
     let git_cache = paths::git_cache_dir()?;
-    let repo_cache_path = git_cache
-        .join(&repo_ref.owner)
-        .join(&repo_ref.repo);
+    let repo_cache_path = git_cache.join(repo_ref.cache_path());
 
     // Clone the repository if not already cloned
     if !repo_cache_path.exists() {
         println!(
             "Cloning repository {}...",
-            style(&repo_ref.repo_id()).cyan()
+            style(&repo_ref.repo_id).cyan()
         );
-        git::clone_repo(&repo_ref.git_url(), &repo_cache_path)?;
+        git::clone_repo(repo_ref.clone_url(), &repo_cache_path)?;
     }
 
     // Handle SHA pinning if specified
@@ -78,7 +80,7 @@ pub fn add(url: &str) -> Result<()> {
         bail!(
             "Path '{}' does not exist in repository {}",
             repo_ref.path,
-            repo_ref.repo_id()
+            repo_ref.repo_id
         );
     }
 
@@ -88,8 +90,8 @@ pub fn add(url: &str) -> Result<()> {
     // Add repository and register all skills as disabled
     lock.update(|config| {
         config.add_repository(
-            repo_ref.repo_id(),
-            repo_ref.git_url(),
+            repo_ref.repo_id.clone(),
+            repo_ref.clone_url().to_string(),
             repo_ref.path.clone(),
             current_sha.clone(),
             pinned_sha.clone(),
@@ -107,7 +109,7 @@ pub fn add(url: &str) -> Result<()> {
             if !config.has_skill(skill_name) {
                 config.add_skill(
                     skill_name.clone(),
-                    repo_ref.repo_id(),
+                    repo_ref.repo_id.clone(),
                     skill_path,
                 );
                 // Immediately disable it (add_skill enables by default)
@@ -120,7 +122,7 @@ pub fn add(url: &str) -> Result<()> {
 
     println!(
         "Added repository {} ({} skills)",
-        style(&repo_ref.repo_id()).cyan(),
+        style(&repo_ref.repo_id).cyan(),
         available_skills.len()
     );
 
@@ -134,15 +136,15 @@ pub fn delete(url: &str, force: bool) -> Result<()> {
     let config = lock.read_config()?;
 
     // Check if repository exists
-    if !config.has_repository(&repo_ref.repo_id()) {
+    if !config.has_repository(&repo_ref.repo_id) {
         bail!(
             "Repository '{}' not found. Use 'sm repo list' to see registered repositories.",
-            repo_ref.repo_id()
+            repo_ref.repo_id
         );
     }
 
     // Check if any skills are using this repository
-    let skills = config.skills_for_repo(&repo_ref.repo_id());
+    let skills = config.skills_for_repo(&repo_ref.repo_id);
     let enabled_count = skills.iter().filter(|s| s.enabled).count();
 
     if enabled_count > 0 && !force {
@@ -150,7 +152,7 @@ pub fn delete(url: &str, force: bool) -> Result<()> {
             "{} {} enabled skill(s) from {} are registered.",
             style("Warning:").yellow(),
             enabled_count,
-            style(&repo_ref.repo_id()).cyan()
+            style(&repo_ref.repo_id).cyan()
         );
         print!("Are you sure you want to remove all these skills? (yes/no): ");
         io::stdout().flush()?;
@@ -189,14 +191,14 @@ pub fn delete(url: &str, force: bool) -> Result<()> {
         }
 
         // Remove repository
-        config.remove_repository(&repo_ref.repo_id());
+        config.remove_repository(&repo_ref.repo_id);
 
         Ok(())
     })?;
 
     println!(
         "Removed repository {} and {} skill(s)",
-        style(&repo_ref.repo_id()).cyan(),
+        style(&repo_ref.repo_id).cyan(),
         skill_names.len()
     );
 
@@ -272,24 +274,22 @@ pub fn pin(url: &str) -> Result<()> {
 
     // Check if repository exists
     let config = lock.read_config()?;
-    if !config.has_repository(&repo_ref.repo_id()) {
+    if !config.has_repository(&repo_ref.repo_id) {
         bail!(
             "Repository '{}' is not registered. Use 'sm repo list' to see all repositories.",
-            repo_ref.repo_id()
+            repo_ref.repo_id
         );
     }
 
     // Get current SHA from git working directory
     let git_cache = paths::git_cache_dir()?;
-    let repo_cache_path = git_cache
-        .join(&repo_ref.owner)
-        .join(&repo_ref.repo);
+    let repo_cache_path = git_cache.join(repo_ref.cache_path());
 
     let current_sha = git::get_current_sha(&repo_cache_path)?;
 
     // Update repository to pin it
     lock.update(|config| {
-        if let Some(repo) = config.repositories.get_mut(&repo_ref.repo_id()) {
+        if let Some(repo) = config.repositories.get_mut(&repo_ref.repo_id) {
             repo.pinned_sha = Some(current_sha.clone());
             repo.current_sha = Some(current_sha.clone());
         }
@@ -298,7 +298,7 @@ pub fn pin(url: &str) -> Result<()> {
 
     println!(
         "Pinned {} at {}",
-        style(&repo_ref.repo_id()).cyan(),
+        style(&repo_ref.repo_id).cyan(),
         style(&current_sha).yellow()
     );
 
@@ -311,22 +311,22 @@ pub fn unpin(url: &str) -> Result<()> {
 
     // Check if repository exists
     let config = lock.read_config()?;
-    if !config.has_repository(&repo_ref.repo_id()) {
+    if !config.has_repository(&repo_ref.repo_id) {
         bail!(
             "Repository '{}' is not registered. Use 'sm repo list' to see all repositories.",
-            repo_ref.repo_id()
+            repo_ref.repo_id
         );
     }
 
     let current_sha = config
         .repositories
-        .get(&repo_ref.repo_id())
+        .get(&repo_ref.repo_id)
         .and_then(|r| r.current_sha.clone())
         .unwrap_or_else(|| "unknown".to_string());
 
     // Update repository to unpin it
     lock.update(|config| {
-        if let Some(repo) = config.repositories.get_mut(&repo_ref.repo_id()) {
+        if let Some(repo) = config.repositories.get_mut(&repo_ref.repo_id) {
             repo.pinned_sha = None;
         }
         Ok(())
@@ -334,7 +334,7 @@ pub fn unpin(url: &str) -> Result<()> {
 
     println!(
         "Unpinned {} (currently at {})",
-        style(&repo_ref.repo_id()).cyan(),
+        style(&repo_ref.repo_id).cyan(),
         style(&current_sha).yellow()
     );
 
@@ -417,23 +417,21 @@ pub fn upgrade(url: &str) -> Result<()> {
 fn upgrade_with_lock(repo_ref: &RepoRef, lock: &ConfigLock) -> Result<()> {
     // Check if repository exists
     let config = lock.read_config()?;
-    if !config.has_repository(&repo_ref.repo_id()) {
+    if !config.has_repository(&repo_ref.repo_id) {
         bail!(
             "Repository '{}' is not registered. Use 'sm repo list' to see all repositories.",
-            repo_ref.repo_id()
+            repo_ref.repo_id
         );
     }
 
     let git_cache = paths::git_cache_dir()?;
-    let repo_cache_path = git_cache
-        .join(&repo_ref.owner)
-        .join(&repo_ref.repo);
+    let repo_cache_path = git_cache.join(repo_ref.cache_path());
 
     if let Some(target_sha) = &repo_ref.sha {
         // Mode B: Upgrade to specific SHA and pin
         println!(
             "Upgrading {} to {}...",
-            style(&repo_ref.repo_id()).cyan(),
+            style(&repo_ref.repo_id).cyan(),
             style(target_sha).yellow()
         );
 
@@ -453,13 +451,13 @@ fn upgrade_with_lock(repo_ref: &RepoRef, lock: &ConfigLock) -> Result<()> {
         let mut added = Vec::new();
 
         lock.update(|config| {
-            if let Some(repo) = config.repositories.get_mut(&repo_ref.repo_id()) {
+            if let Some(repo) = config.repositories.get_mut(&repo_ref.repo_id) {
                 repo.current_sha = Some(actual_sha.clone());
                 repo.pinned_sha = Some(actual_sha.clone());
             }
 
             // Reconcile skills - handle deleted and new skills
-            let (r, a) = reconcile_skills(config, &repo_ref.repo_id(), &new_skills, &repo_ref.path)?;
+            let (r, a) = reconcile_skills(config, &repo_ref.repo_id, &new_skills, &repo_ref.path)?;
             removed = r;
             added = a;
 
@@ -487,12 +485,12 @@ fn upgrade_with_lock(repo_ref: &RepoRef, lock: &ConfigLock) -> Result<()> {
         }
     } else {
         // Mode A: Upgrade to latest
-        let repo = config.repositories.get(&repo_ref.repo_id()).unwrap();
+        let repo = config.repositories.get(&repo_ref.repo_id).unwrap();
 
         if repo.pinned_sha.is_some() {
             bail!(
                 "Repository '{}' is pinned. Use 'sm repo unpin' first or specify a commit with @SHA.",
-                repo_ref.repo_id()
+                repo_ref.repo_id
             );
         }
 
@@ -500,7 +498,7 @@ fn upgrade_with_lock(repo_ref: &RepoRef, lock: &ConfigLock) -> Result<()> {
 
         println!(
             "Upgrading {}...",
-            style(&repo_ref.repo_id()).cyan()
+            style(&repo_ref.repo_id).cyan()
         );
 
         let new_sha = git::pull_to_latest(&repo_cache_path)?;
@@ -527,12 +525,12 @@ fn upgrade_with_lock(repo_ref: &RepoRef, lock: &ConfigLock) -> Result<()> {
         let mut added = Vec::new();
 
         lock.update(|config| {
-            if let Some(repo) = config.repositories.get_mut(&repo_ref.repo_id()) {
+            if let Some(repo) = config.repositories.get_mut(&repo_ref.repo_id) {
                 repo.current_sha = Some(new_sha.clone());
             }
 
             // Reconcile skills - handle deleted and new skills
-            let (r, a) = reconcile_skills(config, &repo_ref.repo_id(), &new_skills, &repo_ref.path)?;
+            let (r, a) = reconcile_skills(config, &repo_ref.repo_id, &new_skills, &repo_ref.path)?;
             removed = r;
             added = a;
 

@@ -276,7 +276,7 @@ fn enable_with_lock(lock: &ConfigLock, skill_names_or_refs: &[String]) -> Result
             // Parse repository reference to get cache path
             let repo_ref = RepoRef::parse(&skill_info.repository)?;
             let git_cache = paths::git_cache_dir()?;
-            let repo_cache_path = git_cache.join(&repo_ref.owner).join(&repo_ref.repo);
+            let repo_cache_path = git_cache.join(repo_ref.cache_path());
             let source_path = repo_cache_path.join(&skill_info.skill_path);
             create_skill_symlinks_for_all_integrations(&source_path, skill_name_or_ref, &config)?;
 
@@ -703,31 +703,33 @@ fn add_interactive(lock: &ConfigLock, skill_refs: &[String]) -> Result<()> {
 
     // Parse as repository reference
     let repo_ref = RepoRef::parse(repo_url)?;
-    let repo_id = repo_ref.repo_id();
+    let repo_id = repo_ref.repo_id.clone();
 
     let config = lock.read_config()?;
     let git_cache = paths::git_cache_dir()?;
-    let repo_cache_path = git_cache.join(&repo_ref.owner).join(&repo_ref.repo);
+    let repo_cache_path = git_cache.join(repo_ref.cache_path());
 
     // Add repository if it doesn't exist
     if !config.has_repository(&repo_id) {
-        // Check for conflicts with same git repo, different path
-        let git_repo_key = format!("{}/{}", repo_ref.owner, repo_ref.repo);
-        for (existing_repo_id, _) in &config.repositories {
-            if existing_repo_id.starts_with(&format!("github.com/{}", git_repo_key))
-                && existing_repo_id != &repo_id {
-                bail!(
-                    "Cannot add {}. A different path from the same git repository is already registered: {}\nOnly one skill repository per git repository is allowed.",
-                    repo_id,
-                    existing_repo_id
-                );
+        // Check for conflicts with same git repo, different path (only for remote repos)
+        if repo_ref.source_type != crate::skill_ref::GitSourceType::Local {
+            let base_repo_id = repo_ref.repo_id.split('/').take(3).collect::<Vec<_>>().join("/");
+            for (existing_repo_id, _) in &config.repositories {
+                if existing_repo_id.starts_with(&base_repo_id)
+                    && existing_repo_id != &repo_id {
+                    bail!(
+                        "Cannot add {}. A different path from the same git repository is already registered: {}\nOnly one skill repository per git repository is allowed.",
+                        repo_id,
+                        existing_repo_id
+                    );
+                }
             }
         }
 
         // Clone the repository if needed
         if !repo_cache_path.exists() {
             println!("Cloning repository {}...", style(&repo_id).cyan());
-            git::clone_repo(&repo_ref.git_url(), &repo_cache_path)?;
+            git::clone_repo(repo_ref.clone_url(), &repo_cache_path)?;
         }
 
         // Get current SHA
@@ -749,7 +751,7 @@ fn add_interactive(lock: &ConfigLock, skill_refs: &[String]) -> Result<()> {
 
         // Add repository to config and register all skills as disabled
         lock.update(|config| {
-            config.add_repository(repo_id.clone(), repo_ref.git_url(), repo_ref.path.clone(), current_sha, None);
+            config.add_repository(repo_id.clone(), repo_ref.clone_url().to_string(), repo_ref.path.clone(), current_sha, None);
 
             // Register all detected skills as disabled
             for skill_name in &available_skills {

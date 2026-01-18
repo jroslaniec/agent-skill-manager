@@ -79,7 +79,7 @@ pub fn add(name: &str, custom_path: Option<&str>) -> Result<()> {
             // Get source path from git cache
             if let Ok(repo_ref) = RepoRef::parse(&skill.repository) {
                 let git_cache = paths::git_cache_dir()?;
-                let repo_path = git_cache.join(&repo_ref.owner).join(&repo_ref.repo);
+                let repo_path = git_cache.join(repo_ref.cache_path());
                 let source_path = repo_path.join(&skill.skill_path);
 
                 if source_path.exists() {
