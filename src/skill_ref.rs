@@ -224,10 +224,53 @@ impl RepoRef {
         let (reference, sha) = Self::extract_sha_suffix(reference)?;
 
         // Handle file:// URLs and local: prefix (from repo_id)
-        let path_str = reference
-            .strip_prefix("file://")
-            .or_else(|| reference.strip_prefix("local:"))
-            .unwrap_or(reference);
+        let path_str = if let Some(stripped) = reference.strip_prefix("file://") {
+            // Handle file:// URLs with lenient parsing
+            // file:///path -> /path (correct triple slash)
+            // file://path -> /path (auto-correct missing slash for absolute-looking paths)
+            // file://Users/dev -> /Users/dev (auto-correct common macOS pattern)
+            if stripped.starts_with('/') {
+                // Already has the third slash, correct format
+                stripped
+            } else if stripped.starts_with("Users/")
+                || stripped.starts_with("home/")
+                || stripped.starts_with("var/")
+                || stripped.starts_with("tmp/")
+                || stripped.starts_with("opt/")
+                || stripped.starts_with("usr/")
+                || stripped.starts_with("etc/")
+            {
+                // Common Unix root directories - user likely meant absolute path
+                // We can't modify the string in place, so we'll handle this below
+                stripped
+            } else {
+                stripped
+            }
+        } else {
+            reference
+                .strip_prefix("local:")
+                .unwrap_or(reference)
+        };
+
+        // Check if this looks like a Unix root directory without leading slash
+        // This handles file://Users/dev/skills -> /Users/dev/skills
+        let path_str = if !path_str.starts_with('/')
+            && !path_str.starts_with('~')
+            && !path_str.starts_with('.')
+            && (path_str.starts_with("Users/")
+                || path_str.starts_with("home/")
+                || path_str.starts_with("var/")
+                || path_str.starts_with("tmp/")
+                || path_str.starts_with("opt/")
+                || path_str.starts_with("usr/")
+                || path_str.starts_with("etc/"))
+        {
+            // This is an absolute path missing the leading slash
+            format!("/{}", path_str)
+        } else {
+            path_str.to_string()
+        };
+        let path_str = path_str.as_str();
 
         // Expand ~ to home directory
         let expanded = if path_str.starts_with("~/") || path_str == "~" {
@@ -716,6 +759,32 @@ mod tests {
         let repo = RepoRef::parse("file:///Users/dev/my-skills").unwrap();
         assert_eq!(repo.source_type, GitSourceType::Local);
         assert_eq!(repo.git_url, "/Users/dev/my-skills");
+    }
+
+    #[test]
+    fn test_parse_file_url_missing_slash_users() {
+        // file://Users/dev/skills should auto-correct to /Users/dev/skills
+        let repo = RepoRef::parse("file://Users/dev/skills").unwrap();
+        assert_eq!(repo.source_type, GitSourceType::Local);
+        assert_eq!(repo.git_url, "/Users/dev/skills");
+        assert_eq!(repo.repo_id, "local:/Users/dev/skills");
+    }
+
+    #[test]
+    fn test_parse_file_url_missing_slash_home() {
+        // file://home/user/skills should auto-correct to /home/user/skills
+        let repo = RepoRef::parse("file://home/user/skills").unwrap();
+        assert_eq!(repo.source_type, GitSourceType::Local);
+        assert_eq!(repo.git_url, "/home/user/skills");
+        assert_eq!(repo.repo_id, "local:/home/user/skills");
+    }
+
+    #[test]
+    fn test_parse_file_url_triple_slash_correct() {
+        // file:///path/to/repo should work correctly (triple slash is correct format)
+        let repo = RepoRef::parse("file:///path/to/repo").unwrap();
+        assert_eq!(repo.source_type, GitSourceType::Local);
+        assert_eq!(repo.git_url, "/path/to/repo");
     }
 
     // ===== Helper method tests =====

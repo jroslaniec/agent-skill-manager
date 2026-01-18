@@ -280,3 +280,25 @@
   - Summary messages help users understand partial success when some repos fail
 
 ---
+
+## 2026-01-18 - US-003: Fix orphaned agents on repo removal
+
+- What was implemented:
+  - Updated `delete_single()` in `repo.rs` to also handle agents when removing a repository
+  - Added agent count check alongside skill count for confirmation prompt
+  - Collect agent names for the repository using `config.agents_for_repo()`
+  - Call `remove_agent_symlinks_from_all_integrations()` for each agent
+  - Call `config.remove_agent()` for each agent before removing repository
+  - Made `remove_agent_symlinks_from_all_integrations()` public in subagent.rs
+  - Updated output message to show both skills and agents removed
+
+- Files changed:
+  - src/commands/repo.rs - Added agent cleanup logic to delete_single()
+  - src/commands/subagent.rs - Made remove_agent_symlinks_from_all_integrations() public
+
+- **Learnings for future iterations:**
+  - Agent cleanup mirrors skill cleanup - use `agents_for_repo()`, `remove_agent_symlinks_from_all_integrations()`, and `remove_agent()`
+  - The function `remove_agent_symlinks_from_all_integrations()` was already implemented but was private
+  - When adding cleanup for a new entity type, follow the same pattern: collect names, remove symlinks, update config
+
+---
