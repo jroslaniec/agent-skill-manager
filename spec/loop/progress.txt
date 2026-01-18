@@ -344,3 +344,39 @@
   - When adding agent support to skill-only functions, also handle the enable/disable calls for agents separately
 
 ---
+
+## 2026-01-18 - US-006: Fix interactive mode agent detection
+
+- What was implemented:
+  - Added agent scanning to `add_interactive()` function using existing `scan_for_agents()` helper
+  - Combined skills and agents into a single list with type labels and colors
+  - Modified interactive prompt to show "Select skills and agents:" when agents are present
+  - Applied colored type labels ([skill] in cyan, [agent] in yellow) to the interactive options
+  - Implemented enable/disable logic for both skills and agents from interactive selections
+
+- Files changed:
+  - src/commands/skill.rs - Extended add_interactive() to detect and handle agents
+
+- **Learnings for future iterations:**
+  - This was automatically completed as part of US-005 implementation
+  - Agent detection and display in interactive mode follows the same pattern as skills
+  - The scan_for_agents() and scan_for_skills() functions work identically, just look for different file names (AGENT.md vs SKILL.md)
+
+---
+
+## 2026-01-18 - US-007: Standardize cache location
+
+- What was implemented:
+  - Modified `cache_dir()` in `paths.rs` to always use `~/.cache/agent-skill-manager` instead of platform-specific directories
+  - Removed dependency on `dirs::cache_dir()` which returns `~/Library/Caches` on macOS
+  - Now uses `dirs::home_dir().join(".cache").join("agent-skill-manager")` for consistent behavior across all platforms
+
+- Files changed:
+  - src/paths.rs - Changed cache_dir() implementation to use ~/.cache on all platforms
+
+- **Learnings for future iterations:**
+  - `dirs::cache_dir()` is platform-specific (Linux: ~/.cache, macOS: ~/Library/Caches)
+  - For consistent cross-platform behavior, manually construct the cache path using home dir
+  - All derived paths (config_path, git_cache_dir) automatically use the standardized cache location
+
+---
