@@ -257,3 +257,26 @@
   - Helper functions like add_single() keep the logic clean and maintainable
 
 ---
+
+## 2026-01-18 - US-002: Multi-repo remove command
+
+- What was implemented:
+  - Changed CLI `RepoAction::Delete` from single `url: String` to multiple `urls: Vec<String>`
+  - Created `delete_single()` helper function to handle removing a single repository
+  - Updated `delete()` function to iterate through all provided URLs and call `delete_single()` for each
+  - Implemented error handling: continues processing remaining repos if one fails, prints errors to stderr
+  - Added exit code handling: exits with code 1 if any operation failed
+  - Added summary message showing "Removed X/Y repositories" when multiple repos are processed
+  - Preserved confirmation prompts for repo deletion (when not using --force)
+
+- Files changed:
+  - src/cli.rs - Changed Delete argument from single url to urls: Vec<String>
+  - src/main.rs - Updated handler to pass the vector to delete()
+  - src/commands/repo.rs - Refactored delete() to handle multiple repos, extracted delete_single() helper
+
+- **Learnings for future iterations:**
+  - The same multi-argument pattern from add applies to delete
+  - Interactive confirmations (like "Are you sure?") work fine in loops - each repo can be confirmed separately
+  - Summary messages help users understand partial success when some repos fail
+
+---
