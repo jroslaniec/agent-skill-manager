@@ -209,3 +209,27 @@
   - SkillRef::parse() is GitHub-specific and doesn't work with local repo references
 
 ---
+
+## 2026-01-18 - BUG-003: Remove GitHub-specific language from error messages
+
+- What was implemented:
+  - Updated error message in `SkillRef::parse()` from "Not a valid GitHub skill reference" to generic "Not a valid skill reference"
+  - Updated error message format example from "github.com/OWNER/REPO/SKILL" to generic "OWNER/REPO/SKILL"
+  - Updated help text in cli.rs to show all supported formats equally:
+    - `repo add` now shows: "github.com/owner/repo, gitlab.com/owner/repo, or /local/path"
+    - `skills enable/disable` now show: "owner/repo/git-commit" instead of "github.com/owner/repo/git-commit"
+    - `subagents enable/disable` now show: "owner/repo/my-agent" instead of "github.com/owner/repo/my-agent"
+  - Updated error message examples in skill.rs from specific GitHub URLs to generic formats with interactive mode suggestion
+
+- Files changed:
+  - src/skill_ref.rs - Updated error messages to be generic
+  - src/cli.rs - Updated help text examples to show multiple formats equally
+  - src/commands/skill.rs - Updated error message examples to be generic
+
+- **Learnings for future iterations:**
+  - GitHub-specific language appears in error messages, help text, and code comments
+  - When updating error messages, also check help text and examples for consistency
+  - Generic examples (host.com instead of github.com) make it clear that other git sources are supported equally
+  - Error messages should suggest alternative approaches (like using interactive mode) instead of assuming specific formats
+
+---

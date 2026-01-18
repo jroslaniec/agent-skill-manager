@@ -1,0 +1,196 @@
+{
+  "prd": "0002-prd-polish-improvements.md",
+  "branchName": "feature/universal-git-and-subagents",
+  "description": "Bug fixes, usability improvements, and documentation updates for Agent Skill Manager including orphaned agent cleanup, multi-argument commands, consistent styling, and documentation gaps",
+  "tasks": [
+    {
+      "id": "BUG-001",
+      "title": "Fix bare sm command not showing skills from local repos",
+      "description": "After sm repo add /path, running bare sm shows 'No skills or agents found' even though sm repo ls shows skills exist",
+      "acceptanceCriteria": [
+        "sm repo add /path/to/repo adds the repository successfully",
+        "Bare sm command shows available skills from local repositories",
+        "Skills can be enabled via the interactive selection",
+        "cargo build passes",
+        "cargo test passes"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "BUG-002",
+      "title": "Fix sm add -i with local paths",
+      "description": "sm add -i /local/path fails with 'Not a valid GitHub skill reference' error instead of showing interactive selection",
+      "acceptanceCriteria": [
+        "sm add -i /path/to/repo shows interactive skill selection",
+        "sm add -i ~/path/to/repo shows interactive skill selection",
+        "sm add -i ./relative/path shows interactive skill selection",
+        "Error message does not reference GitHub specifically",
+        "cargo build passes",
+        "cargo test passes"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "BUG-003",
+      "title": "Remove GitHub-specific language from error messages",
+      "description": "Error messages still reference GitHub as the primary hosting option when universal git sources are now supported equally",
+      "acceptanceCriteria": [
+        "No error messages specifically mention GitHub as primary option",
+        "Messages use generic terms like 'repository' or 'git source'",
+        "Help text mentions all supported formats equally (HTTPS, SSH, local paths)",
+        "cargo build passes",
+        "cargo test passes"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-001",
+      "title": "Multi-repo add command",
+      "description": "As a user managing multiple skill repositories, I want to add multiple repositories in a single command so that I can quickly set up my environment",
+      "acceptanceCriteria": [
+        "sm repo add accepts multiple repository arguments",
+        "All specified repositories are cloned and added to config",
+        "Processing continues even if one repository fails",
+        "Errors are printed to stderr as they occur",
+        "Exit code is non-zero if any operation failed",
+        "cargo build passes",
+        "cargo test passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-002",
+      "title": "Multi-repo remove command",
+      "description": "As a user cleaning up repositories, I want to remove multiple repositories in a single command so that I can efficiently manage my configuration",
+      "acceptanceCriteria": [
+        "sm repo rm accepts multiple repository arguments",
+        "All specified repositories are removed",
+        "Processing continues even if one repository fails",
+        "Summary shows results (e.g., 'Removed 1/2 repositories')",
+        "Exit code is non-zero if any operation failed",
+        "cargo build passes",
+        "cargo test passes"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-003",
+      "title": "Fix orphaned agents on repo removal",
+      "description": "As a user, I want agents to be removed when their repository is deleted so that I don't have orphaned entries in my config",
+      "acceptanceCriteria": [
+        "sm repo rm removes all agents associated with the repository from config",
+        "Agent symlinks are removed when repository is deleted",
+        "No agent entries referencing the removed repository remain in config.toml",
+        "cargo build passes",
+        "cargo test passes"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-004",
+      "title": "Fix file:// URL parsing",
+      "description": "As a user adding local repositories, I want lenient file:// URL parsing so that both file:///path and file://path work correctly",
+      "acceptanceCriteria": [
+        "file:///path/to/repo is parsed correctly",
+        "file://path/to/repo is auto-corrected to file:///path/to/repo",
+        "file://Users/dev/skills resolves to /Users/dev/skills (not concatenated with cwd)",
+        "cargo build passes",
+        "cargo test passes"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-005",
+      "title": "Consistent label colors",
+      "description": "As a user viewing skill and agent lists, I want consistent color coding for [skill] and [agent] labels so that I can quickly distinguish between them",
+      "acceptanceCriteria": [
+        "[skill] labels appear in cyan color",
+        "[agent] labels appear in yellow color",
+        "Colors are consistent across sm ls, sm (interactive), and sm add -i",
+        "cargo build passes",
+        "cargo test passes"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-006",
+      "title": "Fix interactive mode agent detection",
+      "description": "As a user adding skills/agents interactively, I want sm add -i <url> to detect and show agents so that I can enable agents from repositories interactively",
+      "acceptanceCriteria": [
+        "sm add -i <url> scans for AGENT.md files in the repository",
+        "Both skills and agents are shown in the interactive selection",
+        "UI style matches bare sm command (with type labels)",
+        "Labels use consistent colors (cyan for skills, yellow for agents)",
+        "cargo build passes",
+        "cargo test passes"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-007",
+      "title": "Standardize cache location",
+      "description": "As a user, I want the cache to be in ~/.cache/agent-skill-manager on all platforms so that the location is predictable and consistent",
+      "acceptanceCriteria": [
+        "sm cache dir outputs ~/.cache/agent-skill-manager (expanded to absolute path)",
+        "Cache location is consistent on both macOS and Linux",
+        "Does not use platform-specific directories like ~/Library/Caches on macOS",
+        "cargo build passes",
+        "cargo test passes"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-008",
+      "title": "Update README documentation",
+      "description": "As a new user, I want the README to document all current features so that I can learn how to use the tool effectively",
+      "acceptanceCriteria": [
+        "README documents sm subagents command group (enable, disable, list)",
+        "README documents agent discovery (AGENT.md files)",
+        "README documents local repository syntax (/path/to/repo, ~/path, ./relative)",
+        "README documents SSH URL support (git@host:owner/repo.git)",
+        "README removes 'GitHub only' limitation text",
+        "cargo build passes",
+        "cargo test passes"
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-009",
+      "title": "Update CHANGELOG",
+      "description": "As a user upgrading the tool, I want the CHANGELOG to reflect all changes in this release so that I know what's new and what's fixed",
+      "acceptanceCriteria": [
+        "CHANGELOG Unreleased section documents subagent support",
+        "CHANGELOG documents universal git source support (local, SSH, any HTTPS host)",
+        "CHANGELOG documents --agents-path flag for integrations",
+        "CHANGELOG documents all bug fixes from this PRD",
+        "cargo build passes",
+        "cargo test passes"
+      ],
+      "priority": 12,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}
