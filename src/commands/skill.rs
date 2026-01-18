@@ -300,10 +300,9 @@ fn enable_with_lock(lock: &ConfigLock, skill_names_or_refs: &[String]) -> Result
             let config = lock.read_config()?;
             let skill_info = config.skills.get(skill_name_or_ref).unwrap();
 
-            // Parse repository reference to get cache path
+            // Parse repository reference and resolve cache path (handles legacy paths)
             let repo_ref = RepoRef::parse(&skill_info.repository)?;
-            let git_cache = paths::git_cache_dir()?;
-            let repo_cache_path = git_cache.join(repo_ref.cache_path());
+            let repo_cache_path = paths::resolve_repo_cache_path(&repo_ref)?;
             let source_path = repo_cache_path.join(&skill_info.skill_path);
             create_skill_symlinks_for_all_integrations(&source_path, skill_name_or_ref, &config)?;
 

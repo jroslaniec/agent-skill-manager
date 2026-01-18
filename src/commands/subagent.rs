@@ -42,9 +42,9 @@ pub fn enable_with_lock(lock: &ConfigLock, agent_names_or_refs: &[String]) -> Re
             let config = lock.read_config()?;
             let agent_info = config.agents.get(agent_name_or_ref).unwrap();
 
-            // Get the source path to the AGENT.md file
+            // Get the source path to the AGENT.md file (resolve handles legacy paths)
             let repo_ref = RepoRef::parse(&agent_info.repository)?;
-            let repo_cache_path = paths::repo_cache_path(&repo_ref)?;
+            let repo_cache_path = paths::resolve_repo_cache_path(&repo_ref)?;
             let source_path = repo_cache_path.join(&agent_info.agent_path).join("AGENT.md");
 
             create_agent_symlinks_for_all_integrations(&source_path, agent_name_or_ref, &config)?;
