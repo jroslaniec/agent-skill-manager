@@ -52,7 +52,7 @@ pub enum Command {
     #[command(visible_aliases = ["ls"])]
     List {
         /// Show all items (enabled and disabled)
-        #[arg(long)]
+        #[arg(short = 'a', long)]
         all: bool,
 
         /// Filter by status (enabled or disabled)
@@ -68,7 +68,7 @@ pub enum Command {
         skills: bool,
 
         /// Show only agents
-        #[arg(short = 'a', long)]
+        #[arg(short = 'g', long)]
         agents: bool,
     },
 
