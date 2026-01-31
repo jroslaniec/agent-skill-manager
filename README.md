@@ -12,6 +12,8 @@ A CLI tool for managing [Agent Skills](https://agentskills.io).
 
 The tool clones repositories containing skills to a local cache directory. When you enable a skill, it creates symlinks in all your registered coding agents' skill directories. Disabling a skill removes the symlinks while keeping the repository cached for fast re-enabling.
 
+Local repositories (`/path/to/dir`, `~/dir`, `./dir`) skip cloning entirely — symlinks point directly to the source directory. Changes you make to local skill files are reflected immediately without needing `sm upgrade`.
+
 ## Installation
 
 ### Installer Script (macOS and Linux)
@@ -71,6 +73,10 @@ sm add github.com/anthropics/skills/skills/pdf
 sm add \
   github.com/anthropics/skills/skills/pdf \
   github.com/anthropics/skills/skills/docx
+
+# Add a local skill directly (auto-registers parent as local repo)
+sm add /path/to/my-skill
+sm add /path/to/my-skill/SKILL.md
 
 # Interactive mode - select skills from a repository
 sm add -i github.com/anthropics/skills/skills
@@ -154,6 +160,8 @@ sm repo upgrade github.com/owner/repo@abc12345
 sm upgrade
 sm upgrade --force  # Skip confirmation
 ```
+
+**Note**: Local repositories cannot be pinned or unpinned (no SHA tracking). Running `sm upgrade` on local repos re-scans the directory for new or removed skills and agents without performing any git operations. Deleting a local repo (`sm repo delete`) removes symlinks and config but does **not** delete the source directory.
 
 ### Enable/Disable Skills
 

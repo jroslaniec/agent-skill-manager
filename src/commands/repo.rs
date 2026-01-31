@@ -74,31 +74,44 @@ fn add_single(lock: &ConfigLock, url: &str) -> Result<()> {
         }
     }
 
-    // Determine where to clone the repo
-    let repo_cache_path = paths::repo_cache_path(&repo_ref)?;
+    let is_local = repo_ref.source_type == crate::skill_ref::GitSourceType::Local;
 
-    // Clone the repository if not already cloned
-    if !repo_cache_path.exists() {
-        println!("Cloning repository {}...", style(&repo_ref.repo_id).cyan());
-        git::clone_repo(repo_ref.clone_url(), &repo_cache_path)?;
-    }
-
-    // Handle SHA pinning if specified
-    let (current_sha, pinned_sha) = if let Some(sha) = &repo_ref.sha {
-        // Checkout the specific SHA
-        println!("Checking out commit {}...", style(sha).yellow());
-        git::checkout_sha(&repo_cache_path, sha)?;
-        let actual_sha = git::get_current_sha(&repo_cache_path)?;
-        println!(
-            "{} Pinned to {}",
-            style("✓").green(),
-            style(&actual_sha).cyan()
-        );
-        (Some(actual_sha.clone()), Some(actual_sha))
+    // For local repos, use the path directly; for remote repos, clone to cache
+    let (repo_cache_path, current_sha, pinned_sha) = if is_local {
+        let local_path = PathBuf::from(&repo_ref.git_url);
+        if !local_path.exists() {
+            bail!("Local path '{}' does not exist", repo_ref.git_url);
+        }
+        (local_path, None, None)
     } else {
-        // No SHA specified, just get current SHA
-        let sha = git::get_current_sha(&repo_cache_path)?;
-        (Some(sha), None)
+        // Determine where to clone the repo
+        let repo_cache_path = paths::repo_cache_path(&repo_ref)?;
+
+        // Clone the repository if not already cloned
+        if !repo_cache_path.exists() {
+            println!("Cloning repository {}...", style(&repo_ref.repo_id).cyan());
+            git::clone_repo(repo_ref.clone_url(), &repo_cache_path)?;
+        }
+
+        // Handle SHA pinning if specified
+        let (current_sha, pinned_sha) = if let Some(sha) = &repo_ref.sha {
+            // Checkout the specific SHA
+            println!("Checking out commit {}...", style(sha).yellow());
+            git::checkout_sha(&repo_cache_path, sha)?;
+            let actual_sha = git::get_current_sha(&repo_cache_path)?;
+            println!(
+                "{} Pinned to {}",
+                style("✓").green(),
+                style(&actual_sha).cyan()
+            );
+            (Some(actual_sha.clone()), Some(actual_sha))
+        } else {
+            // No SHA specified, just get current SHA
+            let sha = git::get_current_sha(&repo_cache_path)?;
+            (Some(sha), None)
+        };
+
+        (repo_cache_path, current_sha, pinned_sha)
     };
 
     // Verify the path exists within the repository
@@ -436,6 +449,11 @@ pub fn list() -> Result<()> {
 
 pub fn pin(url: &str) -> Result<()> {
     let repo_ref = RepoRef::parse(url)?;
+
+    if repo_ref.source_type == crate::skill_ref::GitSourceType::Local {
+        bail!("Local repositories cannot be pinned");
+    }
+
     let lock = ConfigLock::acquire()?;
 
     // Check if repository exists
@@ -473,6 +491,11 @@ pub fn pin(url: &str) -> Result<()> {
 
 pub fn unpin(url: &str) -> Result<()> {
     let repo_ref = RepoRef::parse(url)?;
+
+    if repo_ref.source_type == crate::skill_ref::GitSourceType::Local {
+        bail!("Local repositories cannot be unpinned");
+    }
+
     let lock = ConfigLock::acquire()?;
 
     // Check if repository exists
@@ -650,6 +673,77 @@ fn upgrade_with_lock(repo_ref: &RepoRef, lock: &ConfigLock) -> Result<()> {
             "Repository '{}' is not registered. Use 'sm repo list' to see all repositories.",
             repo_ref.repo_id
         );
+    }
+
+    let is_local = repo_ref.source_type == crate::skill_ref::GitSourceType::Local;
+
+    // For local repos: skip git operations, just re-scan and reconcile
+    if is_local {
+        let local_path = PathBuf::from(&repo_ref.git_url);
+        let repo = config.repositories.get(&repo_ref.repo_id).unwrap();
+        let full_path = if repo.path.is_empty() {
+            local_path.clone()
+        } else {
+            local_path.join(&repo.path)
+        };
+
+        println!("Scanning {}...", style(&repo_ref.repo_id).cyan());
+
+        let new_skills = scan_for_skills(&full_path)?;
+        let new_agents = scan_for_agents(&full_path)?;
+
+        let mut removed_skills = Vec::new();
+        let mut added_skills = Vec::new();
+        let mut removed_agents = Vec::new();
+        let mut added_agents = Vec::new();
+
+        lock.update(|config| {
+            let (rs, as_) =
+                reconcile_skills(config, &repo_ref.repo_id, &new_skills, &repo_ref.path)?;
+            removed_skills = rs;
+            added_skills = as_;
+
+            let (ra, aa) =
+                reconcile_agents(config, &repo_ref.repo_id, &new_agents, &repo_ref.path)?;
+            removed_agents = ra;
+            added_agents = aa;
+
+            Ok(())
+        })?;
+
+        println!(
+            "{} Scanned {}",
+            style("✓").green(),
+            style(&repo_ref.repo_id).cyan()
+        );
+
+        let all_removed: Vec<_> = removed_skills
+            .iter()
+            .map(|s| format!("[skill] {}", s))
+            .chain(removed_agents.iter().map(|a| format!("[agent] {}", a)))
+            .collect();
+        if !all_removed.is_empty() {
+            println!(
+                "{} Removed: {} (no longer available)",
+                style("⚠").yellow(),
+                all_removed.join(", ")
+            );
+        }
+
+        let all_added: Vec<_> = added_skills
+            .iter()
+            .map(|s| format!("[skill] {}", s))
+            .chain(added_agents.iter().map(|a| format!("[agent] {}", a)))
+            .collect();
+        if !all_added.is_empty() {
+            println!("{} New: {}", style("✓").green(), all_added.join(", "));
+        }
+
+        if all_removed.is_empty() && all_added.is_empty() {
+            println!("{} No changes detected", style("→").dim());
+        }
+
+        return Ok(());
     }
 
     // Use resolve_repo_cache_path to handle legacy cache paths (repos cloned before universal git support)

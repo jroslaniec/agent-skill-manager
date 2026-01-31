@@ -159,12 +159,19 @@ pub fn repo_cache_path(repo_ref: &crate::skill_ref::RepoRef) -> Result<PathBuf> 
 /// Before universal git support, GitHub repos were cached at `git/{owner}/{repo}`.
 /// After universal git support, they are cached at `git/{host}/{owner}/{repo}`.
 ///
+/// For local repos, returns the original filesystem path directly (no cache copy).
+///
 /// This function checks if the repo exists at the new-style path first, then falls
 /// back to checking the legacy path for GitHub repos.
 ///
 /// Returns the path where the repo actually exists, or the new-style path if
 /// the repo doesn't exist yet (for new clones).
 pub fn resolve_repo_cache_path(repo_ref: &crate::skill_ref::RepoRef) -> Result<PathBuf> {
+    // Local repos: return the original filesystem path directly
+    if repo_ref.source_type == crate::skill_ref::GitSourceType::Local {
+        return Ok(PathBuf::from(&repo_ref.git_url));
+    }
+
     let git_cache = git_cache_dir()?;
 
     // First check the new-style path

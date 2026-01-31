@@ -21,26 +21,48 @@ pub fn add(skill_refs: &[String], interactive: bool) -> Result<()> {
     }
 
     // Parse all skill references
+    // Also collect any local skill paths that need special handling
     let mut skills: Vec<SkillRef> = Vec::new();
+    let mut local_skill_paths: Vec<String> = Vec::new();
     for skill_ref in skill_refs {
         match SkillRef::parse(skill_ref) {
             Ok(skill) => skills.push(skill),
             Err(_) => {
-                // SkillRef::parse failed - check if this is a valid repository URL
-                // If so, provide a helpful error message suggesting -i flag or sm repo add
+                // SkillRef::parse failed - check if this is a local path pointing to a skill
                 if let Ok(repo_ref) = RepoRef::parse(skill_ref) {
-                    // It's a valid repository URL but not a skill reference
-                    eprintln!(
-                        "Error: '{}' looks like a repository URL, not a skill reference.",
-                        skill_ref
-                    );
-                    eprintln!();
-                    eprintln!("To add a repository and select skills interactively, use:");
-                    eprintln!("  sm add -i {}", skill_ref);
-                    eprintln!();
-                    eprintln!("Or add the repository first, then enable skills:");
-                    eprintln!("  sm repo add {}", repo_ref.repo_id);
-                    eprintln!("  sm skills enable <skill-name>");
+                    if repo_ref.source_type == crate::skill_ref::GitSourceType::Local {
+                        // Local path - check if it points to a skill directory (contains SKILL.md)
+                        let skill_path = resolve_local_skill_path(&repo_ref.git_url);
+                        if let Some(path) = skill_path {
+                            local_skill_paths.push(path);
+                            continue;
+                        }
+                        // No SKILL.md found - treat as repo path
+                        eprintln!(
+                            "Error: '{}' looks like a repository path, not a skill directory (no SKILL.md found).",
+                            skill_ref
+                        );
+                        eprintln!();
+                        eprintln!("To add a repository and select skills interactively, use:");
+                        eprintln!("  sm add -i {}", skill_ref);
+                        eprintln!();
+                        eprintln!("Or add the repository first, then enable skills:");
+                        eprintln!("  sm repo add {}", skill_ref);
+                        eprintln!("  sm skills enable <skill-name>");
+                    } else {
+                        // Remote repository URL but not a skill reference
+                        eprintln!(
+                            "Error: '{}' looks like a repository URL, not a skill reference.",
+                            skill_ref
+                        );
+                        eprintln!();
+                        eprintln!("To add a repository and select skills interactively, use:");
+                        eprintln!("  sm add -i {}", skill_ref);
+                        eprintln!();
+                        eprintln!("Or add the repository first, then enable skills:");
+                        eprintln!("  sm repo add {}", repo_ref.repo_id);
+                        eprintln!("  sm skills enable <skill-name>");
+                    }
                 } else {
                     // Neither a valid skill reference nor a valid repo URL
                     eprintln!("Error: '{}' is not a valid skill reference.", skill_ref);
@@ -55,6 +77,18 @@ pub fn add(skill_refs: &[String], interactive: bool) -> Result<()> {
                 std::process::exit(1);
             }
         }
+    }
+
+    // Handle local skill paths (directories containing SKILL.md)
+    for local_path in &local_skill_paths {
+        if let Err(e) = add_local_skill(&lock, local_path) {
+            eprintln!("Error adding {}: {}", local_path, e);
+            std::process::exit(1);
+        }
+    }
+
+    if skills.is_empty() {
+        return Ok(());
     }
 
     // Group skills by repository
@@ -995,13 +1029,22 @@ fn add_interactive(lock: &ConfigLock, skill_refs: &[String]) -> Result<()> {
     let repo_id = repo_ref.repo_id.clone();
 
     let config = lock.read_config()?;
-    let git_cache = paths::git_cache_dir()?;
-    let repo_cache_path = git_cache.join(repo_ref.cache_path());
+    let is_local = repo_ref.source_type == crate::skill_ref::GitSourceType::Local;
+    let repo_cache_path = if is_local {
+        let p = std::path::PathBuf::from(&repo_ref.git_url);
+        if !p.exists() {
+            bail!("Local path '{}' does not exist", repo_ref.git_url);
+        }
+        p
+    } else {
+        let git_cache = paths::git_cache_dir()?;
+        git_cache.join(repo_ref.cache_path())
+    };
 
     // Add repository if it doesn't exist
     if !config.has_repository(&repo_id) {
         // Check for conflicts with same git repo, different path (only for remote repos)
-        if repo_ref.source_type != crate::skill_ref::GitSourceType::Local {
+        if !is_local {
             let base_repo_id = repo_ref
                 .repo_id
                 .split('/')
@@ -1019,14 +1062,18 @@ fn add_interactive(lock: &ConfigLock, skill_refs: &[String]) -> Result<()> {
             }
         }
 
-        // Clone the repository if needed
-        if !repo_cache_path.exists() {
+        // Clone the repository if needed (skip for local repos)
+        if !is_local && !repo_cache_path.exists() {
             println!("Cloning repository {}...", style(&repo_id).cyan());
             git::clone_repo(repo_ref.clone_url(), &repo_cache_path)?;
         }
 
-        // Get current SHA
-        let current_sha = git::get_current_sha(&repo_cache_path).ok();
+        // Get current SHA (skip for local repos)
+        let current_sha = if is_local {
+            None
+        } else {
+            git::get_current_sha(&repo_cache_path).ok()
+        };
 
         // Scan for skills before adding repository
         let scan_path = if repo_ref.path.is_empty() {
@@ -1418,6 +1465,116 @@ fn scan_for_agents(path: &Path) -> Result<Vec<String>> {
 
     agents.sort();
     Ok(agents)
+}
+
+/// Resolve a local path to a skill directory path.
+///
+/// Accepts:
+/// - A path ending in SKILL.md (returns parent directory)
+/// - A directory containing SKILL.md (returns that directory)
+///
+/// Returns None if no SKILL.md is found.
+fn resolve_local_skill_path(path: &str) -> Option<String> {
+    let p = Path::new(path);
+
+    // If path ends with SKILL.md, use the parent directory
+    if p.file_name().is_some_and(|f| f == "SKILL.md") {
+        return p
+            .parent()
+            .map(|parent| parent.to_string_lossy().to_string());
+    }
+
+    // Check if the directory contains SKILL.md
+    if p.join("SKILL.md").exists() {
+        return Some(path.to_string());
+    }
+
+    None
+}
+
+/// Add a local skill by its filesystem path.
+/// Registers the parent directory as a local repo (if not already registered)
+/// and enables the skill.
+fn add_local_skill(lock: &ConfigLock, skill_dir: &str) -> Result<()> {
+    let skill_path = Path::new(skill_dir);
+    if !skill_path.exists() {
+        bail!("Path '{}' does not exist", skill_dir);
+    }
+
+    let skill_name = skill_path
+        .file_name()
+        .context("Invalid skill path")?
+        .to_string_lossy()
+        .to_string();
+
+    // The parent directory is the "repo"
+    let parent_dir = skill_path
+        .parent()
+        .context("Skill path has no parent directory")?;
+
+    let parent_str = parent_dir.to_string_lossy().to_string();
+    let repo_ref = RepoRef::parse(&parent_str)?;
+    let repo_id = repo_ref.repo_id.clone();
+
+    // Register parent as a local repo if not already registered
+    let config = lock.read_config()?;
+    if !config.has_repository(&repo_id) {
+        // Scan for all skills and agents in the parent directory
+        let available_skills = scan_for_skills(parent_dir)?;
+        let available_agents = scan_for_agents(parent_dir)?;
+
+        lock.update(|config| {
+            config.add_repository(
+                repo_id.clone(),
+                parent_str.clone(),
+                String::new(),
+                None,
+                None,
+            );
+
+            // Register all detected skills as disabled
+            for s in &available_skills {
+                if !config.has_skill(s) {
+                    config.add_skill(s.clone(), repo_id.clone(), s.clone());
+                    config.disable_skill(s).ok();
+                }
+            }
+
+            // Register all detected agents as disabled
+            for a in &available_agents {
+                if !config.has_agent(a) {
+                    config.add_agent(a.clone(), repo_id.clone(), a.clone());
+                    config.disable_agent(a).ok();
+                }
+            }
+
+            Ok(())
+        })?;
+
+        let items_discovered = match (available_skills.len(), available_agents.len()) {
+            (0, 0) => "no skills or agents".to_string(),
+            (s, 0) => format!("{} skill{}", s, if s == 1 { "" } else { "s" }),
+            (0, a) => format!("{} agent{}", a, if a == 1 { "" } else { "s" }),
+            (s, a) => format!(
+                "{} skill{}, {} agent{}",
+                s,
+                if s == 1 { "" } else { "s" },
+                a,
+                if a == 1 { "" } else { "s" }
+            ),
+        };
+
+        println!(
+            "Added repository {} ({})",
+            style(&repo_id).cyan(),
+            items_discovered
+        );
+    }
+
+    // Enable the requested skill
+    enable_with_lock(lock, &[skill_name])?;
+
+    Ok(())
 }
 
 fn check_for_updates(repo_id: &str, config: &crate::config::state::Config) -> Result<Option<bool>> {
