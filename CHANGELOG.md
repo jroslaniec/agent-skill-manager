@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## Version 0.0.5 (2026-01-31)
+
 ### Added
 
 - **Local repos as direct-link** - Local repositories (`/path/to/dir`, `~/dir`, `./dir`) now skip `git clone` entirely. Symlinks point directly to the source directory, so changes are reflected immediately without needing `sm upgrade`. Pin/unpin are rejected for local repos since they have no SHA tracking.
