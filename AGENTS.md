@@ -25,7 +25,7 @@ To auto-fix formatting issues: `cargo fmt`
 
 ## Architecture Overview
 
-Agent Skill Manager (`sm`) is a CLI tool for managing Claude Code skills. It clones skill repositories, creates symlinks to `~/.claude/skills/`, and tracks state in a TOML config file.
+Agent Skill Manager (`sm`) is a CLI tool for managing Claude Code skills. It clones skill repositories (or links directly to local directories), creates symlinks to `~/.claude/skills/`, and tracks state in a TOML config file.
 
 ### Module Structure
 
@@ -46,7 +46,7 @@ Agent Skill Manager (`sm`) is a CLI tool for managing Claude Code skills. It clo
 
 **Skill discovery**: `scan_for_skills()` finds directories containing `SKILL.md` files.
 
-**Symlinks**: Skills are enabled by symlinking `~/.claude/skills/{name}` to the cached repo path.
+**Symlinks**: Skills are enabled by symlinking `~/.claude/skills/{name}` to the cached repo path. For local repositories, symlinks point directly to the source directory (no cache copy).
 
 **Reference parsing**: `SkillRef` and `RepoRef` in `skill_ref.rs` normalize various input formats and extract owner/repo/path/sha components.
 
@@ -69,6 +69,5 @@ Agent Skill Manager (`sm`) is a CLI tool for managing Claude Code skills. It clo
 
 ## Limitations
 
-- GitHub only (no GitLab/Bitbucket)
 - Unix only (uses symlinks, no Windows support)
-- Requires `git` CLI installed
+- Requires `git` CLI installed (not needed for local-only repos)

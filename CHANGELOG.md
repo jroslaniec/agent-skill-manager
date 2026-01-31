@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Added
+
+- **Local repos as direct-link** - Local repositories (`/path/to/dir`, `~/dir`, `./dir`) now skip `git clone` entirely. Symlinks point directly to the source directory, so changes are reflected immediately without needing `sm upgrade`. Pin/unpin are rejected for local repos since they have no SHA tracking.
+- **`sm add` supports local skill paths** - `sm add /path/to/skill-dir` and `sm add /path/to/skill-dir/SKILL.md` now work directly. The parent directory is auto-registered as a local repo and the skill is enabled in one step.
+
 ## Version 0.0.4 (2026-01-18)
 
 ### Added
