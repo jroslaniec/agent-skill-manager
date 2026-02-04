@@ -719,8 +719,8 @@ fn upgrade_with_lock(repo_ref: &RepoRef, lock: &ConfigLock) -> Result<()> {
 
         let all_removed: Vec<_> = removed_skills
             .iter()
-            .map(|s| format!("[skill] {}", s))
-            .chain(removed_agents.iter().map(|a| format!("[agent] {}", a)))
+            .map(|s| format!("🅂  {}", s))
+            .chain(removed_agents.iter().map(|a| format!("🄰  {}", a)))
             .collect();
         if !all_removed.is_empty() {
             println!(
@@ -732,8 +732,8 @@ fn upgrade_with_lock(repo_ref: &RepoRef, lock: &ConfigLock) -> Result<()> {
 
         let all_added: Vec<_> = added_skills
             .iter()
-            .map(|s| format!("[skill] {}", s))
-            .chain(added_agents.iter().map(|a| format!("[agent] {}", a)))
+            .map(|s| format!("🅂  {}", s))
+            .chain(added_agents.iter().map(|a| format!("🄰  {}", a)))
             .collect();
         if !all_added.is_empty() {
             println!("{} New: {}", style("✓").green(), all_added.join(", "));
@@ -806,8 +806,8 @@ fn upgrade_with_lock(repo_ref: &RepoRef, lock: &ConfigLock) -> Result<()> {
         // Combine removed items for display
         let all_removed: Vec<_> = removed_skills
             .iter()
-            .map(|s| format!("[skill] {}", s))
-            .chain(removed_agents.iter().map(|a| format!("[agent] {}", a)))
+            .map(|s| format!("🅂  {}", s))
+            .chain(removed_agents.iter().map(|a| format!("🄰  {}", a)))
             .collect();
         if !all_removed.is_empty() {
             println!(
@@ -820,8 +820,8 @@ fn upgrade_with_lock(repo_ref: &RepoRef, lock: &ConfigLock) -> Result<()> {
         // Combine added items for display
         let all_added: Vec<_> = added_skills
             .iter()
-            .map(|s| format!("[skill] {}", s))
-            .chain(added_agents.iter().map(|a| format!("[agent] {}", a)))
+            .map(|s| format!("🅂  {}", s))
+            .chain(added_agents.iter().map(|a| format!("🄰  {}", a)))
             .collect();
         if !all_added.is_empty() {
             println!("{} New: {}", style("✓").green(), all_added.join(", "));
@@ -901,8 +901,8 @@ fn upgrade_with_lock(repo_ref: &RepoRef, lock: &ConfigLock) -> Result<()> {
         // Combine removed items for display
         let all_removed: Vec<_> = removed_skills
             .iter()
-            .map(|s| format!("[skill] {}", s))
-            .chain(removed_agents.iter().map(|a| format!("[agent] {}", a)))
+            .map(|s| format!("🅂  {}", s))
+            .chain(removed_agents.iter().map(|a| format!("🄰  {}", a)))
             .collect();
         if !all_removed.is_empty() {
             println!(
@@ -915,8 +915,8 @@ fn upgrade_with_lock(repo_ref: &RepoRef, lock: &ConfigLock) -> Result<()> {
         // Combine added items for display
         let all_added: Vec<_> = added_skills
             .iter()
-            .map(|s| format!("[skill] {}", s))
-            .chain(added_agents.iter().map(|a| format!("[agent] {}", a)))
+            .map(|s| format!("🅂  {}", s))
+            .chain(added_agents.iter().map(|a| format!("🄰  {}", a)))
             .collect();
         if !all_added.is_empty() {
             println!("{} New: {}", style("✓").green(), all_added.join(", "));

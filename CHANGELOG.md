@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Added
+
+- Interactive prompts now support case-insensitive filtering while typing.
+- Interactive prompts now use Unicode styling with boxed checkmarks and a cleaner header/footer.
+
 ## Version 0.0.5 (2026-01-31)
 
 ### Added

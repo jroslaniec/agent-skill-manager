@@ -2,10 +2,26 @@ use anyhow::{Context, Result, bail};
 use console::style;
 use std::path::PathBuf;
 
-use crate::commands::skill::create_skill_symlink;
+use crate::commands::{skill::create_skill_symlink, ui};
 use crate::config::ConfigLock;
 use crate::paths;
 use crate::skill_ref::RepoRef;
+
+fn case_insensitive_score(input: &str, filter_value: &str) -> Option<i64> {
+    let input = input.trim();
+    if input.is_empty() {
+        return Some(0);
+    }
+
+    let input_lower = input.to_lowercase();
+    let value_lower = filter_value.to_lowercase();
+
+    if value_lower.contains(&input_lower) {
+        Some(0)
+    } else {
+        None
+    }
+}
 
 /// Add a new integration
 pub fn add(name: &str, custom_path: Option<&str>, custom_agents_path: Option<&str>) -> Result<()> {
@@ -311,13 +327,29 @@ pub fn configure() -> Result<()> {
 
     let builtin = paths::builtin_integrations();
 
+    #[derive(Clone)]
+    struct OptionItem {
+        display: String,
+        filter: String,
+    }
+
+    impl std::fmt::Display for OptionItem {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{}", self.display)
+        }
+    }
+
     // Build options showing both skills and agents directories
-    let options: Vec<String> = builtin
+    let options: Vec<OptionItem> = builtin
         .iter()
         .map(|bi| {
             let skills = bi.skills_dir.unwrap_or("-");
             let agents = bi.agents_dir.unwrap_or("-");
-            format!("{} (skills: {}, agents: {})", bi.name, skills, agents)
+
+            OptionItem {
+                display: format!("{} (skills: {}, agents: {})", bi.name, skills, agents),
+                filter: bi.name.to_string(),
+            }
         })
         .collect();
 
@@ -330,9 +362,15 @@ pub fn configure() -> Result<()> {
         .collect();
 
     // Show MultiSelect prompt
-    let selected = inquire::MultiSelect::new("Select integrations to enable:", options.clone())
+    let prompt_text = "Select integrations to enable\nType to search:";
+    let selected = inquire::MultiSelect::new(&prompt_text, options.clone())
         .with_default(&default_indices)
-        .with_help_message("Space to toggle, Enter to confirm, Esc to cancel")
+        .with_help_message("↑↓ move • Space toggle • Enter save • Esc cancel")
+        .with_scorer(&|input, option, _string_value, _idx| {
+            case_insensitive_score(input, &option.filter)
+        })
+        .with_page_size(options.len().max(1))
+        .with_render_config(ui::render_config())
         .prompt();
 
     let selected_options = match selected {
@@ -348,8 +386,9 @@ pub fn configure() -> Result<()> {
     let mut to_remove: Vec<&str> = Vec::new();
 
     for (i, bi) in builtin.iter().enumerate() {
-        let formatted = &options[i];
-        let is_selected = selected_options.contains(formatted);
+        let is_selected = selected_options
+            .iter()
+            .any(|selected| selected.display == options[i].display);
         let is_enabled = config.has_integration(bi.name);
 
         if is_selected && !is_enabled {

@@ -5,12 +5,28 @@ use std::io::IsTerminal;
 use std::os::unix::fs as unix_fs;
 use std::path::{Path, PathBuf};
 
-use crate::commands::subagent;
+use crate::commands::{subagent, ui};
 use crate::config::ConfigLock;
 use crate::config::state::Config;
 use crate::git;
 use crate::paths;
 use crate::skill_ref::{RepoRef, SkillRef};
+
+fn case_insensitive_score(input: &str, filter_value: &str) -> Option<i64> {
+    let input = input.trim();
+    if input.is_empty() {
+        return Some(0);
+    }
+
+    let input_lower = input.to_lowercase();
+    let value_lower = filter_value.to_lowercase();
+
+    if value_lower.contains(&input_lower) {
+        Some(0)
+    } else {
+        None
+    }
+}
 
 pub fn add(skill_refs: &[String], interactive: bool) -> Result<()> {
     let lock = ConfigLock::acquire()?;
@@ -772,8 +788,8 @@ pub fn list_combined(
         // Print each item
         for item in filtered_items {
             let type_str = match item.item_type {
-                ItemType::Skill => style("[skill]").cyan(),
-                ItemType::Agent => style("[agent]").yellow(),
+                ItemType::Skill => style("🅂").cyan(),
+                ItemType::Agent => style("🄰").yellow(),
             };
 
             let status_str = if item.enabled {
@@ -914,15 +930,31 @@ pub fn manage() -> Result<()> {
             })
     });
 
+    #[derive(Clone)]
+    struct OptionItem {
+        display: String,
+        filter: String,
+    }
+
+    impl std::fmt::Display for OptionItem {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{}", self.display)
+        }
+    }
+
     // Build options for multi-select with colored type prefixes
-    let options: Vec<String> = all_items
+    let options: Vec<OptionItem> = all_items
         .iter()
         .map(|item| {
-            let type_prefix = match item.item_type {
-                ItemType::Skill => style("[skill]").cyan().to_string(),
-                ItemType::Agent => style("[agent]").yellow().to_string(),
+            let (type_prefix, type_label) = match item.item_type {
+                ItemType::Skill => (style("🅂").cyan().to_string(), "skill"),
+                ItemType::Agent => (style("🄰").yellow().to_string(), "agent"),
             };
-            format!("{} {} ({})", type_prefix, item.name, item.repo_id)
+
+            OptionItem {
+                display: format!("{}  {} ({})", type_prefix, item.name, item.repo_id),
+                filter: format!("{} {}", item.name, type_label),
+            }
         })
         .collect();
 
@@ -935,14 +967,19 @@ pub fn manage() -> Result<()> {
         .collect();
 
     // Show multi-select prompt
-    let selected = inquire::MultiSelect::new("Select skills and agents:", options.clone())
+    let prompt_text = "Select skills and agents\nType to search:";
+    let selected = inquire::MultiSelect::new(&prompt_text, options.clone())
         .with_default(&default_indices)
-        .with_help_message("↑↓ to move, Space to toggle, Enter to save, Esc to cancel")
+        .with_help_message("↑↓ move • Space toggle • Enter save • Esc cancel")
         .with_formatter(&|_| String::new())
-        .without_filtering()
+        .with_scorer(&|input, option, _string_value, _idx| {
+            case_insensitive_score(input, &option.filter)
+        })
+        .with_page_size(options.len().max(1))
+        .with_render_config(ui::render_config())
         .prompt();
 
-    let selected_strings = match selected {
+    let selected_options = match selected {
         Ok(selections) => selections,
         Err(_) => {
             println!("Cancelled");
@@ -957,8 +994,9 @@ pub fn manage() -> Result<()> {
     let mut agents_to_disable: Vec<String> = Vec::new();
 
     for (idx, item) in all_items.iter().enumerate() {
-        let formatted = &options[idx];
-        let should_be_enabled = selected_strings.contains(formatted);
+        let should_be_enabled = selected_options
+            .iter()
+            .any(|selected| selected.display == options[idx].display);
 
         match item.item_type {
             ItemType::Skill => {
@@ -1189,15 +1227,31 @@ fn add_interactive(lock: &ConfigLock, skill_refs: &[String]) -> Result<()> {
         _ => a.name.cmp(&b.name),
     });
 
+    #[derive(Clone)]
+    struct OptionItem {
+        display: String,
+        filter: String,
+    }
+
+    impl std::fmt::Display for OptionItem {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{}", self.display)
+        }
+    }
+
     // Build options for multi-select with colored type labels
-    let options: Vec<String> = items
+    let options: Vec<OptionItem> = items
         .iter()
         .map(|item| {
-            let type_prefix = match item.item_type {
-                ItemType::Skill => style("[skill]").cyan().to_string(),
-                ItemType::Agent => style("[agent]").yellow().to_string(),
+            let (type_prefix, type_label) = match item.item_type {
+                ItemType::Skill => (style("🅂").cyan().to_string(), "skill"),
+                ItemType::Agent => (style("🄰").yellow().to_string(), "agent"),
             };
-            format!("{} {}", type_prefix, item.name)
+
+            OptionItem {
+                display: format!("{}  {}", type_prefix, item.name),
+                filter: format!("{} {}", item.name, type_label),
+            }
         })
         .collect();
 
@@ -1210,17 +1264,22 @@ fn add_interactive(lock: &ConfigLock, skill_refs: &[String]) -> Result<()> {
         .collect();
 
     // Show multi-select prompt
-    let prompt_text = if items.iter().any(|i| matches!(i.item_type, ItemType::Agent)) {
-        "Select skills and agents:"
+    let prompt_title = if items.iter().any(|i| matches!(i.item_type, ItemType::Agent)) {
+        "Select skills and agents"
     } else {
-        "Select skills:"
+        "Select skills"
     };
 
-    let selected = inquire::MultiSelect::new(prompt_text, options.clone())
+    let prompt_text = format!("{}\nType to search:", prompt_title);
+    let selected = inquire::MultiSelect::new(&prompt_text, options.clone())
         .with_default(&default_indices)
-        .with_help_message("↑↓ to move, Space to toggle, Enter to save, Esc to cancel")
+        .with_help_message("↑↓ move • Space toggle • Enter save • Esc cancel")
         .with_formatter(&|_| String::new())
-        .without_filtering()
+        .with_scorer(&|input, option, _string_value, _idx| {
+            case_insensitive_score(input, &option.filter)
+        })
+        .with_page_size(options.len().max(1))
+        .with_render_config(ui::render_config())
         .prompt();
 
     let selected_options = match selected {
@@ -1238,12 +1297,15 @@ fn add_interactive(lock: &ConfigLock, skill_refs: &[String]) -> Result<()> {
     let mut agents_to_disable: Vec<String> = Vec::new();
 
     for item in &items {
-        let should_be_enabled =
-            selected_options.contains(&if matches!(item.item_type, ItemType::Skill) {
-                format!("{} {}", style("[skill]").cyan(), item.name)
-            } else {
-                format!("{} {}", style("[agent]").yellow(), item.name)
-            });
+        let display = if matches!(item.item_type, ItemType::Skill) {
+            format!("{}  {}", style("🅂").cyan(), item.name)
+        } else {
+            format!("{}  {}", style("🄰").yellow(), item.name)
+        };
+
+        let should_be_enabled = selected_options
+            .iter()
+            .any(|selected| selected.display == display);
 
         match &item.item_type {
             ItemType::Skill => {
