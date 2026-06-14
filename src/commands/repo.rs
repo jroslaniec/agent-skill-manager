@@ -384,78 +384,136 @@ pub fn list() -> Result<()> {
         return Ok(());
     }
 
-    // Print header
-    println!(
-        "{:<8}  {:<40}  {:>10}  {:>10}  {:<10}  {:<12}  {:<10}",
-        style("SOURCE").bold(),
-        style("REPOSITORY").bold(),
-        style("SKILLS").bold(),
-        style("AGENTS").bold(),
-        style("CURRENT").bold(),
-        style("AUTO-UPGRADE").bold(),
-        style("PIN").bold()
-    );
+    // Collect rows of plain (uncolored) cell values, sorted by repo id for a
+    // stable ordering.
+    let mut repos: Vec<_> = config.repositories.iter().collect();
+    repos.sort_by(|a, b| a.0.cmp(b.0));
 
-    // Print separator
-    println!("{}", "-".repeat(112));
-
-    // Print each repository
-    for (repo_id, repo) in &config.repositories {
-        // Determine source type from the URL
-        let source_type = crate::skill_ref::GitSourceType::from_url(&repo.url).label();
-        let source_display = format!("[{}]", source_type);
-
-        // Get all skills for this repository
-        let skills = config.skills_for_repo(repo_id);
-        let skills_total = skills.len();
-        let skills_enabled = skills.iter().filter(|s| s.enabled).count();
-
-        // Get all agents for this repository
-        let agents = config.agents_for_repo(repo_id);
-        let agents_total = agents.len();
-        let agents_enabled = agents.iter().filter(|a| a.enabled).count();
-
-        // Format as "enabled/total" ratio
-        let skills_display = format!("{}/{}", skills_enabled, skills_total);
-        let agents_display = format!("{}/{}", agents_enabled, agents_total);
-
-        let current_sha_display = repo
-            .current_sha
-            .as_ref()
-            .map(|s| {
-                let short = if s.len() > 8 { &s[..8] } else { s };
-                short.to_string()
-            })
-            .unwrap_or_else(|| "-".to_string());
-
-        let pinned_sha_display = repo
-            .pinned_sha
-            .as_ref()
-            .map(|s| {
-                let short = if s.len() > 8 { &s[..8] } else { s };
-                style(short).yellow().to_string()
-            })
-            .unwrap_or_else(|| "-".to_string());
-
-        let auto_upgrade_display = if repo.auto_upgrade {
-            style("on").green().to_string()
+    let short_sha = |s: &str| -> String {
+        if s.len() > 8 {
+            s[..8].to_string()
         } else {
-            "-".to_string()
-        };
+            s.to_string()
+        }
+    };
 
-        println!(
-            "{:<8}  {:<40}  {:>10}  {:>10}  {:<10}  {:<12}  {}",
-            style(&source_display).magenta(),
-            style(repo_id).cyan(),
-            style(&skills_display).green(),
-            style(&agents_display).blue(),
-            style(&current_sha_display).dim(),
-            auto_upgrade_display,
-            pinned_sha_display
+    // Columns: [source, repository, skills, agents, current, auto-upgrade, pin]
+    let mut rows: Vec<[String; 7]> = Vec::with_capacity(repos.len());
+    for (repo_id, repo) in &repos {
+        let source = format!(
+            "[{}]",
+            crate::skill_ref::GitSourceType::from_url(&repo.url).label()
         );
+
+        let skills = config.skills_for_repo(repo_id);
+        let agents = config.agents_for_repo(repo_id);
+        let skills_cell = format!(
+            "{}/{}",
+            skills.iter().filter(|s| s.enabled).count(),
+            skills.len()
+        );
+        let agents_cell = format!(
+            "{}/{}",
+            agents.iter().filter(|a| a.enabled).count(),
+            agents.len()
+        );
+
+        let current = repo
+            .current_sha
+            .as_deref()
+            .map(&short_sha)
+            .unwrap_or_else(|| "-".to_string());
+        let pin = repo
+            .pinned_sha
+            .as_deref()
+            .map(&short_sha)
+            .unwrap_or_else(|| "-".to_string());
+        let auto = if repo.auto_upgrade { "on" } else { "-" }.to_string();
+
+        rows.push([
+            source,
+            (*repo_id).clone(),
+            skills_cell,
+            agents_cell,
+            current,
+            auto,
+            pin,
+        ]);
+    }
+
+    let headers = [
+        "SOURCE",
+        "REPOSITORY",
+        "SKILLS",
+        "AGENTS",
+        "CURRENT",
+        "AUTO-UPGRADE",
+        "PIN",
+    ];
+
+    // Column widths = max(header, widest cell). Computed from plain text so the
+    // ANSI color codes added at render time never throw off the alignment.
+    let mut widths = headers.map(|h| h.chars().count());
+    for row in &rows {
+        for (i, cell) in row.iter().enumerate() {
+            widths[i] = widths[i].max(cell.chars().count());
+        }
+    }
+
+    const GAP: &str = "  ";
+
+    // Header row (bold), padded by visible length.
+    let header_line = headers
+        .iter()
+        .enumerate()
+        .map(|(i, h)| pad_visible(&style(h).bold().to_string(), h.chars().count(), widths[i]))
+        .collect::<Vec<_>>()
+        .join(GAP);
+    println!("{}", header_line.trim_end());
+
+    let total: usize = widths.iter().sum::<usize>() + GAP.len() * (widths.len() - 1);
+    println!("{}", "-".repeat(total));
+
+    // Data rows: color each cell, then pad by its plain (visible) width.
+    for row in &rows {
+        let colored = [
+            style(&row[0]).magenta().to_string(),
+            style(&row[1]).cyan().to_string(),
+            style(&row[2]).green().to_string(),
+            style(&row[3]).blue().to_string(),
+            style(&row[4]).dim().to_string(),
+            if row[5] == "on" {
+                style(&row[5]).green().to_string()
+            } else {
+                row[5].clone()
+            },
+            if row[6] == "-" {
+                row[6].clone()
+            } else {
+                style(&row[6]).yellow().to_string()
+            },
+        ];
+
+        let line = colored
+            .iter()
+            .enumerate()
+            .map(|(i, cell)| pad_visible(cell, row[i].chars().count(), widths[i]))
+            .collect::<Vec<_>>()
+            .join(GAP);
+        println!("{}", line.trim_end());
     }
 
     Ok(())
+}
+
+/// Right-pad a (possibly ANSI-colored) cell to `width` columns based on its
+/// *visible* length, so escape codes don't affect alignment.
+fn pad_visible(content: &str, visible_len: usize, width: usize) -> String {
+    format!(
+        "{}{}",
+        content,
+        " ".repeat(width.saturating_sub(visible_len))
+    )
 }
 
 pub fn pin(url: &str) -> Result<()> {
@@ -1414,6 +1472,19 @@ mod tests {
             config.add_skill(name.to_string(), repo_id.to_string(), skill_path);
         }
         config
+    }
+
+    #[test]
+    fn test_pad_visible() {
+        // Plain text pads to the target width.
+        assert_eq!(pad_visible("ab", 2, 5), "ab   ");
+        // Already at/over width: no padding (saturating).
+        assert_eq!(pad_visible("abcd", 4, 4), "abcd");
+        assert_eq!(pad_visible("abcde", 5, 4), "abcde");
+        // ANSI codes don't count toward width: a 2-visible cell still pads to 5,
+        // so the colored and plain forms occupy the same number of columns.
+        let colored = "\u{1b}[31mab\u{1b}[0m";
+        assert_eq!(pad_visible(colored, 2, 5), format!("{colored}   "));
     }
 
     #[test]

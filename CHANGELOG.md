@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- **`sm repo list` columns now align regardless of repository name length.** Column widths are computed from the actual content (and padding ignores ANSI color codes), so long repository ids/paths no longer push the later columns out of alignment. Repositories are also listed in a stable, sorted order.
+
 ### Added
 
 - **Automatic once-a-day update notice.** After a command (on an interactive terminal, at most once per 24h), `sm` checks whether a newer release is published and prints a one-line "✨ A new version of sm is available" notice pointing at `sm self upgrade`. Best-effort and silent on failure; disable with `SM_NO_UPDATE_CHECK=1`.
