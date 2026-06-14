@@ -12,6 +12,32 @@ pub enum GitSourceType {
     Local,
 }
 
+impl GitSourceType {
+    /// Determine the source type from a stored clone URL or filesystem path.
+    ///
+    /// This mirrors how URLs are classified during parsing, so a `RepoRef`
+    /// reconstructed from a stored repository's `url` gets the same source type
+    /// it had when first added.
+    pub fn from_url(url: &str) -> Self {
+        if url.starts_with("git@") {
+            GitSourceType::Ssh
+        } else if url.starts_with('/') || url.starts_with("file://") {
+            GitSourceType::Local
+        } else {
+            GitSourceType::Https
+        }
+    }
+
+    /// Short lowercase label for display (e.g. in `sm repo list`).
+    pub fn label(&self) -> &'static str {
+        match self {
+            GitSourceType::Https => "https",
+            GitSourceType::Ssh => "ssh",
+            GitSourceType::Local => "local",
+        }
+    }
+}
+
 /// Represents a parsed skill reference (e.g., github.com/owner/repo/path/to/skill)
 #[derive(Debug, Clone)]
 pub struct SkillRef {
@@ -149,6 +175,26 @@ impl RepoRef {
 
         // Otherwise, treat as HTTPS URL
         Self::parse_https(reference)
+    }
+
+    /// Build a `RepoRef` for an already-registered repository from its stored
+    /// config record (its `repo_id`, clone `url`, and subdirectory `path`).
+    ///
+    /// Unlike [`RepoRef::parse`], this preserves the subdirectory `path`. A repo
+    /// id is only ever `host/owner/repo` (the subpath is stored separately), so
+    /// re-parsing an id loses the subdir — which silently makes upgrades scan the
+    /// wrong directory. Operations on a registered repo should use this instead.
+    ///
+    /// `sha` is left `None`; an explicit `@sha` override from user input must be
+    /// applied by the caller after construction.
+    pub fn from_stored(repo_id: &str, url: &str, path: &str) -> Self {
+        Self {
+            source_type: GitSourceType::from_url(url),
+            git_url: url.to_string(),
+            path: path.to_string(),
+            sha: None,
+            repo_id: repo_id.to_string(),
+        }
     }
 
     /// Check if a reference looks like a local filesystem path
@@ -846,5 +892,64 @@ mod tests {
 
         let repo_no_path = RepoRef::parse("github.com/testowner/testrepo").unwrap();
         assert_eq!(repo_no_path.full_ref(), "github.com/testowner/testrepo");
+    }
+
+    // ===== GitSourceType::from_url / from_stored =====
+
+    #[test]
+    fn test_git_source_type_from_url() {
+        assert_eq!(
+            GitSourceType::from_url("https://github.com/owner/repo.git"),
+            GitSourceType::Https
+        );
+        assert_eq!(
+            GitSourceType::from_url("git@github.com:owner/repo.git"),
+            GitSourceType::Ssh
+        );
+        assert_eq!(
+            GitSourceType::from_url("/Users/dev/skills"),
+            GitSourceType::Local
+        );
+        assert_eq!(
+            GitSourceType::from_url("file:///path/to/repo"),
+            GitSourceType::Local
+        );
+    }
+
+    #[test]
+    fn test_from_stored_preserves_subpath() {
+        // A repo id never carries the subpath, but the stored record does.
+        let repo = RepoRef::from_stored(
+            "github.com/owner/repo",
+            "https://github.com/owner/repo.git",
+            "skills",
+        );
+        assert_eq!(repo.repo_id, "github.com/owner/repo");
+        assert_eq!(repo.path, "skills");
+        assert_eq!(repo.source_type, GitSourceType::Https);
+        assert_eq!(repo.git_url, "https://github.com/owner/repo.git");
+        assert_eq!(repo.sha, None);
+    }
+
+    #[test]
+    fn test_from_stored_round_trips_with_full_ref() {
+        // from_stored must reconstruct the same full_ref that the original parse
+        // produced — which RepoRef::parse(repo_id) alone cannot, since the id has
+        // no subpath. This is the core of the issue #1 fix.
+        let original = RepoRef::parse("github.com/owner/repo/nested/skills").unwrap();
+        let restored = RepoRef::from_stored(&original.repo_id, &original.git_url, &original.path);
+        assert_eq!(restored.full_ref(), original.full_ref());
+        assert_eq!(restored.full_ref(), "github.com/owner/repo/nested/skills");
+
+        // Whereas re-parsing the id alone loses the subpath:
+        let reparsed = RepoRef::parse(&original.repo_id).unwrap();
+        assert_eq!(reparsed.path, "");
+    }
+
+    #[test]
+    fn test_source_type_label() {
+        assert_eq!(GitSourceType::Https.label(), "https");
+        assert_eq!(GitSourceType::Ssh.label(), "ssh");
+        assert_eq!(GitSourceType::Local.label(), "local");
     }
 }

@@ -361,17 +361,6 @@ fn delete_single(lock: &ConfigLock, url: &str, force: bool) -> Result<()> {
     Ok(())
 }
 
-/// Determine the git source type from a URL string
-fn url_to_source_type(url: &str) -> &'static str {
-    if url.starts_with("git@") {
-        "ssh"
-    } else if url.starts_with('/') || url.starts_with("file://") {
-        "local"
-    } else {
-        "https"
-    }
-}
-
 pub fn list() -> Result<()> {
     let lock = ConfigLock::acquire()?;
     let config = lock.read_config()?;
@@ -398,7 +387,7 @@ pub fn list() -> Result<()> {
     // Print each repository
     for (repo_id, repo) in &config.repositories {
         // Determine source type from the URL
-        let source_type = url_to_source_type(&repo.url);
+        let source_type = crate::skill_ref::GitSourceType::from_url(&repo.url).label();
         let source_display = format!("[{}]", source_type);
 
         // Get all skills for this repository
@@ -552,6 +541,20 @@ fn reconcile_skills(
     let mut removed_skills = Vec::new();
     let mut added_skills = Vec::new();
 
+    // Safety net: an empty scan while skills are already registered almost always
+    // means the scan ran against the wrong directory (e.g. a missing or incorrect
+    // subdirectory) rather than a genuine upstream deletion of every skill. Skip
+    // the mass-removal and warn instead of silently wiping the repo's skills.
+    if new_skills.is_empty() && !existing_skills.is_empty() {
+        eprintln!(
+            "{} Skipped removing {} skill(s) from '{}': none found on disk (check the repository path).",
+            style("⚠").yellow(),
+            existing_skills.len(),
+            repo_id
+        );
+        return Ok((removed_skills, added_skills));
+    }
+
     // Find deleted skills (exist in config but not in filesystem)
     for (skill_name, _skill) in &existing_skills {
         if !new_skills_set.contains(skill_name) {
@@ -616,6 +619,19 @@ fn reconcile_agents(
     let mut removed_agents = Vec::new();
     let mut added_agents = Vec::new();
 
+    // Safety net (see reconcile_skills): an empty scan with agents already
+    // registered almost always means the scan hit the wrong directory, not a
+    // genuine deletion. Skip mass-removal and warn rather than wipe.
+    if new_agents.is_empty() && !existing_agents.is_empty() {
+        eprintln!(
+            "{} Skipped removing {} agent(s) from '{}': none found on disk (check the repository path).",
+            style("⚠").yellow(),
+            existing_agents.len(),
+            repo_id
+        );
+        return Ok((removed_agents, added_agents));
+    }
+
     // Find deleted agents (exist in config but not in filesystem)
     for (agent_name, _agent) in &existing_agents {
         if !new_agents_set.contains(agent_name) {
@@ -659,12 +675,120 @@ fn reconcile_agents(
 }
 
 pub fn upgrade(url: &str) -> Result<()> {
-    let repo_ref = RepoRef::parse(url)?;
+    // Parse the user input only to resolve the repo id and an optional @sha
+    // override; the clone url and subdirectory path come from the stored record
+    // so the configured subdirectory is never lost (see RepoRef::from_stored).
+    let parsed = RepoRef::parse(url)?;
     let lock = ConfigLock::acquire()?;
+
+    let mut repo_ref = {
+        let config = lock.read_config()?;
+        let repo = config.repositories.get(&parsed.repo_id).ok_or_else(|| {
+            anyhow::anyhow!(
+                "Repository '{}' is not registered. Use 'sm repo list' to see all repositories.",
+                parsed.repo_id
+            )
+        })?;
+        RepoRef::from_stored(&parsed.repo_id, &repo.url, &repo.path)
+    };
+    repo_ref.sha = parsed.sha;
+
     upgrade_with_lock(&repo_ref, &lock)
 }
 
-/// Internal upgrade logic that uses an existing lock
+/// Aggregated skill/agent additions and removals from a repository refresh.
+struct RepoChanges {
+    removed_skills: Vec<String>,
+    added_skills: Vec<String>,
+    removed_agents: Vec<String>,
+    added_agents: Vec<String>,
+}
+
+impl RepoChanges {
+    fn has_changes(&self) -> bool {
+        !self.removed_skills.is_empty()
+            || !self.added_skills.is_empty()
+            || !self.removed_agents.is_empty()
+            || !self.added_agents.is_empty()
+    }
+}
+
+/// Join a repository root with its (possibly empty) subdirectory path.
+fn join_subdir(root: &Path, subpath: &str) -> PathBuf {
+    if subpath.is_empty() {
+        root.to_path_buf()
+    } else {
+        root.join(subpath)
+    }
+}
+
+/// Re-scan a repository's skills/agents directory and reconcile the config to
+/// match what is on disk. Shared by every upgrade path (and, later, auto-upgrade)
+/// so the subdirectory handling and reconciliation live in exactly one place.
+fn refresh_repo_items(
+    config: &mut crate::config::state::Config,
+    repo_id: &str,
+    repo_root: &Path,
+    subpath: &str,
+) -> Result<RepoChanges> {
+    let full_path = join_subdir(repo_root, subpath);
+    let new_skills = scan_for_skills(&full_path)?;
+    let new_agents = scan_for_agents(&full_path)?;
+
+    let (removed_skills, added_skills) = reconcile_skills(config, repo_id, &new_skills, subpath)?;
+    let (removed_agents, added_agents) = reconcile_agents(config, repo_id, &new_agents, subpath)?;
+
+    Ok(RepoChanges {
+        removed_skills,
+        added_skills,
+        removed_agents,
+        added_agents,
+    })
+}
+
+/// Print the added/removed skills and agents from a refresh in a consistent way.
+fn print_repo_changes(changes: &RepoChanges) {
+    let removed: Vec<_> = changes
+        .removed_skills
+        .iter()
+        .map(|s| format!("[skill] {}", s))
+        .chain(
+            changes
+                .removed_agents
+                .iter()
+                .map(|a| format!("[agent] {}", a)),
+        )
+        .collect();
+    if !removed.is_empty() {
+        println!(
+            "{} Removed: {} (no longer available)",
+            style("⚠").yellow(),
+            removed.join(", ")
+        );
+    }
+
+    let added: Vec<_> = changes
+        .added_skills
+        .iter()
+        .map(|s| format!("[skill] {}", s))
+        .chain(
+            changes
+                .added_agents
+                .iter()
+                .map(|a| format!("[agent] {}", a)),
+        )
+        .collect();
+    if !added.is_empty() {
+        println!("{} New: {}", style("✓").green(), added.join(", "));
+    }
+}
+
+/// Internal upgrade logic that uses an existing lock.
+///
+/// `repo_ref` must describe an already-registered repository — build it with
+/// [`RepoRef::from_stored`] so its `path` reflects the configured subdirectory.
+/// Reconstructing it via `RepoRef::parse` would drop the subdirectory and make
+/// the rescan look at the wrong place.
 fn upgrade_with_lock(repo_ref: &RepoRef, lock: &ConfigLock) -> Result<()> {
     // Check if repository exists
     let config = lock.read_config()?;
@@ -679,67 +803,29 @@ fn upgrade_with_lock(repo_ref: &RepoRef, lock: &ConfigLock) -> Result<()> {
 
     // For local repos: skip git operations, just re-scan and reconcile
     if is_local {
-        let local_path = PathBuf::from(&repo_ref.git_url);
-        let repo = config.repositories.get(&repo_ref.repo_id).unwrap();
-        let full_path = if repo.path.is_empty() {
-            local_path.clone()
-        } else {
-            local_path.join(&repo.path)
-        };
+        let repo_root = PathBuf::from(&repo_ref.git_url);
 
         println!("Scanning {}...", style(&repo_ref.repo_id).cyan());
 
-        let new_skills = scan_for_skills(&full_path)?;
-        let new_agents = scan_for_agents(&full_path)?;
-
-        let mut removed_skills = Vec::new();
-        let mut added_skills = Vec::new();
-        let mut removed_agents = Vec::new();
-        let mut added_agents = Vec::new();
-
+        let mut changes = None;
         lock.update(|config| {
-            let (rs, as_) =
-                reconcile_skills(config, &repo_ref.repo_id, &new_skills, &repo_ref.path)?;
-            removed_skills = rs;
-            added_skills = as_;
-
-            let (ra, aa) =
-                reconcile_agents(config, &repo_ref.repo_id, &new_agents, &repo_ref.path)?;
-            removed_agents = ra;
-            added_agents = aa;
-
+            changes = Some(refresh_repo_items(
+                config,
+                &repo_ref.repo_id,
+                &repo_root,
+                &repo_ref.path,
+            )?);
             Ok(())
         })?;
+        let changes = changes.expect("refresh_repo_items runs inside lock.update");
 
         println!(
             "{} Scanned {}",
             style("✓").green(),
             style(&repo_ref.repo_id).cyan()
         );
-
-        let all_removed: Vec<_> = removed_skills
-            .iter()
-            .map(|s| format!("[skill] {}", s))
-            .chain(removed_agents.iter().map(|a| format!("[agent] {}", a)))
-            .collect();
-        if !all_removed.is_empty() {
-            println!(
-                "{} Removed: {} (no longer available)",
-                style("⚠").yellow(),
-                all_removed.join(", ")
-            );
-        }
-
-        let all_added: Vec<_> = added_skills
-            .iter()
-            .map(|s| format!("[skill] {}", s))
-            .chain(added_agents.iter().map(|a| format!("[agent] {}", a)))
-            .collect();
-        if !all_added.is_empty() {
-            println!("{} New: {}", style("✓").green(), all_added.join(", "));
-        }
-
-        if all_removed.is_empty() && all_added.is_empty() {
+        print_repo_changes(&changes);
+        if !changes.has_changes() {
             println!("{} No changes detected", style("→").dim());
         }
 
@@ -760,72 +846,28 @@ fn upgrade_with_lock(repo_ref: &RepoRef, lock: &ConfigLock) -> Result<()> {
         git::checkout_sha(&repo_cache_path, target_sha)?;
         let actual_sha = git::get_current_sha(&repo_cache_path)?;
 
-        // Rescan skills and agents
-        let full_path = if repo_ref.path.is_empty() {
-            repo_cache_path.clone()
-        } else {
-            repo_cache_path.join(&repo_ref.path)
-        };
-        let new_skills = scan_for_skills(&full_path)?;
-        let new_agents = scan_for_agents(&full_path)?;
-
-        // Update repository and reconcile skills and agents
-        let mut removed_skills = Vec::new();
-        let mut added_skills = Vec::new();
-        let mut removed_agents = Vec::new();
-        let mut added_agents = Vec::new();
-
+        let mut changes = None;
         lock.update(|config| {
             if let Some(repo) = config.repositories.get_mut(&repo_ref.repo_id) {
                 repo.current_sha = Some(actual_sha.clone());
                 repo.pinned_sha = Some(actual_sha.clone());
             }
-
-            // Reconcile skills - handle deleted and new skills
-            let (rs, as_) =
-                reconcile_skills(config, &repo_ref.repo_id, &new_skills, &repo_ref.path)?;
-            removed_skills = rs;
-            added_skills = as_;
-
-            // Reconcile agents - handle deleted and new agents
-            let (ra, aa) =
-                reconcile_agents(config, &repo_ref.repo_id, &new_agents, &repo_ref.path)?;
-            removed_agents = ra;
-            added_agents = aa;
-
+            changes = Some(refresh_repo_items(
+                config,
+                &repo_ref.repo_id,
+                &repo_cache_path,
+                &repo_ref.path,
+            )?);
             Ok(())
         })?;
+        let changes = changes.expect("refresh_repo_items runs inside lock.update");
 
-        // Report results
         println!(
             "{} Upgraded and pinned to {}",
             style("✓").green(),
             style(&actual_sha).cyan()
         );
-
-        // Combine removed items for display
-        let all_removed: Vec<_> = removed_skills
-            .iter()
-            .map(|s| format!("[skill] {}", s))
-            .chain(removed_agents.iter().map(|a| format!("[agent] {}", a)))
-            .collect();
-        if !all_removed.is_empty() {
-            println!(
-                "{} Removed: {} (no longer available)",
-                style("⚠").yellow(),
-                all_removed.join(", ")
-            );
-        }
-
-        // Combine added items for display
-        let all_added: Vec<_> = added_skills
-            .iter()
-            .map(|s| format!("[skill] {}", s))
-            .chain(added_agents.iter().map(|a| format!("[agent] {}", a)))
-            .collect();
-        if !all_added.is_empty() {
-            println!("{} New: {}", style("✓").green(), all_added.join(", "));
-        }
+        print_repo_changes(&changes);
     } else {
         // Mode A: Upgrade to latest
         let repo = config.repositories.get(&repo_ref.repo_id).unwrap();
@@ -855,72 +897,34 @@ fn upgrade_with_lock(repo_ref: &RepoRef, lock: &ConfigLock) -> Result<()> {
             return Ok(());
         }
 
-        // Rescan skills and agents
-        let full_path = if repo_ref.path.is_empty() {
-            repo_cache_path.clone()
-        } else {
-            repo_cache_path.join(&repo_ref.path)
-        };
-        let new_skills = scan_for_skills(&full_path)?;
-        let new_agents = scan_for_agents(&full_path)?;
-
-        // Update repository and reconcile skills and agents
-        let mut removed_skills = Vec::new();
-        let mut added_skills = Vec::new();
-        let mut removed_agents = Vec::new();
-        let mut added_agents = Vec::new();
-
+        let mut changes = None;
         lock.update(|config| {
             if let Some(repo) = config.repositories.get_mut(&repo_ref.repo_id) {
                 repo.current_sha = Some(new_sha.clone());
             }
-
-            // Reconcile skills - handle deleted and new skills
-            let (rs, as_) =
-                reconcile_skills(config, &repo_ref.repo_id, &new_skills, &repo_ref.path)?;
-            removed_skills = rs;
-            added_skills = as_;
-
-            // Reconcile agents - handle deleted and new agents
-            let (ra, aa) =
-                reconcile_agents(config, &repo_ref.repo_id, &new_agents, &repo_ref.path)?;
-            removed_agents = ra;
-            added_agents = aa;
-
+            changes = Some(refresh_repo_items(
+                config,
+                &repo_ref.repo_id,
+                &repo_cache_path,
+                &repo_ref.path,
+            )?);
             Ok(())
         })?;
+        let changes = changes.expect("refresh_repo_items runs inside lock.update");
 
-        // Report results
+        // old_sha may be the literal "unknown" (no stored sha); guard the slice.
+        let old_display = if old_sha.len() >= 8 {
+            &old_sha[..8]
+        } else {
+            old_sha.as_str()
+        };
         println!(
             "{} Upgraded {} → {}",
             style("✓").green(),
-            style(&old_sha[..8]).dim(),
+            style(old_display).dim(),
             style(&new_sha).cyan()
         );
-
-        // Combine removed items for display
-        let all_removed: Vec<_> = removed_skills
-            .iter()
-            .map(|s| format!("[skill] {}", s))
-            .chain(removed_agents.iter().map(|a| format!("[agent] {}", a)))
-            .collect();
-        if !all_removed.is_empty() {
-            println!(
-                "{} Removed: {} (no longer available)",
-                style("⚠").yellow(),
-                all_removed.join(", ")
-            );
-        }
-
-        // Combine added items for display
-        let all_added: Vec<_> = added_skills
-            .iter()
-            .map(|s| format!("[skill] {}", s))
-            .chain(added_agents.iter().map(|a| format!("[agent] {}", a)))
-            .collect();
-        if !all_added.is_empty() {
-            println!("{} New: {}", style("✓").green(), all_added.join(", "));
-        }
+        print_repo_changes(&changes);
     }
 
     Ok(())
@@ -971,8 +975,11 @@ pub fn upgrade_all(force: bool) -> Result<()> {
     let mut success_count = 0;
     let mut failed_count = 0;
 
-    for (repo_id, _) in unpinned_repos {
-        match RepoRef::parse(repo_id).and_then(|repo_ref| upgrade_with_lock(&repo_ref, &lock)) {
+    for (repo_id, repo) in unpinned_repos {
+        // Build the ref from the stored record so the configured subdirectory is
+        // preserved (a parsed repo id has no subpath).
+        let repo_ref = RepoRef::from_stored(repo_id, &repo.url, &repo.path);
+        match upgrade_with_lock(&repo_ref, &lock) {
             Ok(_) => {
                 // Check if it was actually changed by looking at the output
                 // For now, just count as success
@@ -1211,35 +1218,92 @@ mod tests {
         assert!(agents.contains(&"dual-purpose".to_string()));
     }
 
-    // Tests for url_to_source_type
+    // Regression tests for the subdirectory-aware refresh (issue #1).
 
-    #[test]
-    fn test_url_to_source_type_https() {
-        assert_eq!(
-            url_to_source_type("https://github.com/owner/repo.git"),
-            "https"
+    fn config_with_repo_and_skills(
+        repo_id: &str,
+        subpath: &str,
+        names: &[&str],
+    ) -> crate::config::state::Config {
+        let mut config = crate::config::state::Config::new();
+        config.add_repository(
+            repo_id.to_string(),
+            "https://example.com/owner/repo.git".to_string(),
+            subpath.to_string(),
+            Some("abcdef012345".to_string()),
+            None,
         );
-        assert_eq!(
-            url_to_source_type("https://gitlab.com/team/project.git"),
-            "https"
-        );
-        assert_eq!(url_to_source_type("http://example.com/repo.git"), "https");
+        for name in names {
+            let skill_path = if subpath.is_empty() {
+                name.to_string()
+            } else {
+                format!("{}/{}", subpath, name)
+            };
+            config.add_skill(name.to_string(), repo_id.to_string(), skill_path);
+        }
+        config
     }
 
     #[test]
-    fn test_url_to_source_type_ssh() {
-        assert_eq!(url_to_source_type("git@github.com:owner/repo.git"), "ssh");
-        assert_eq!(url_to_source_type("git@gitlab.com:team/project.git"), "ssh");
+    fn test_join_subdir() {
+        let root = Path::new("/cache/repo");
+        assert_eq!(join_subdir(root, ""), PathBuf::from("/cache/repo"));
         assert_eq!(
-            url_to_source_type("git@bitbucket.org:owner/repo.git"),
-            "ssh"
+            join_subdir(root, "skills"),
+            PathBuf::from("/cache/repo/skills")
         );
     }
 
     #[test]
-    fn test_url_to_source_type_local() {
-        assert_eq!(url_to_source_type("/Users/dev/my-skills"), "local");
-        assert_eq!(url_to_source_type("/home/user/projects/skills"), "local");
-        assert_eq!(url_to_source_type("file:///path/to/repo"), "local");
+    fn test_refresh_preserves_skills_in_subdirectory() {
+        // Skills live under a `skills/` subdirectory inside the repo.
+        let temp_dir = TempDir::new().unwrap();
+        let sub = temp_dir.path().join("skills");
+        create_skill_dir(&sub, "alpha");
+        create_skill_dir(&sub, "beta");
+
+        let repo_id = "example.com/owner/repo";
+        let mut config = config_with_repo_and_skills(repo_id, "skills", &["alpha", "beta"]);
+
+        // Refresh with the correct subpath: skills must survive (issue #1 regression).
+        let changes = refresh_repo_items(&mut config, repo_id, temp_dir.path(), "skills").unwrap();
+        assert!(
+            changes.removed_skills.is_empty(),
+            "no skills should be removed"
+        );
+        assert!(config.has_skill("alpha"));
+        assert!(config.has_skill("beta"));
+    }
+
+    #[test]
+    fn test_safety_net_skips_mass_removal_on_empty_scan() {
+        // An empty scan (e.g. wrong directory) must NOT wipe registered skills.
+        let temp_dir = TempDir::new().unwrap(); // no skill dirs inside
+        let repo_id = "example.com/owner/repo";
+        let mut config = config_with_repo_and_skills(repo_id, "skills", &["alpha", "beta"]);
+
+        let changes = refresh_repo_items(&mut config, repo_id, temp_dir.path(), "skills").unwrap();
+        assert!(
+            changes.removed_skills.is_empty(),
+            "safety net must skip removal"
+        );
+        assert!(config.has_skill("alpha"));
+        assert!(config.has_skill("beta"));
+    }
+
+    #[test]
+    fn test_refresh_removes_genuinely_deleted_skill() {
+        // When the scan finds some (but not all) skills, the missing one is removed.
+        let temp_dir = TempDir::new().unwrap();
+        let sub = temp_dir.path().join("skills");
+        create_skill_dir(&sub, "alpha"); // beta is gone upstream
+
+        let repo_id = "example.com/owner/repo";
+        let mut config = config_with_repo_and_skills(repo_id, "skills", &["alpha", "beta"]);
+
+        let changes = refresh_repo_items(&mut config, repo_id, temp_dir.path(), "skills").unwrap();
+        assert_eq!(changes.removed_skills, vec!["beta".to_string()]);
+        assert!(config.has_skill("alpha"));
+        assert!(!config.has_skill("beta"));
     }
 }
