@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- **`sm upgrade` no longer drops skills/agents from repositories that keep them in a subdirectory.** A repo added with a subpath (e.g. `owner/repo/skills`) stores that subdirectory, but upgrading rescanned the repo *root* instead — found nothing, and removed every registered skill/agent as "no longer available". Upgrades now reconstruct the repository from its stored record, so the configured subdirectory is always used. As a safety net, an empty scan while items are still registered is now skipped with a warning rather than wiping them.
+
 ## Version 0.0.6 (2026-06-14)
 
 ### Added
