@@ -146,6 +146,84 @@ pub fn add(name: &str, custom_path: Option<&str>, custom_agents_path: Option<&st
     Ok(())
 }
 
+/// Migrate legacy per-tool integrations (`codex`, `gemini-cli`, `opencode`) to
+/// the unified `agents` integration that targets the shared `~/.agents/skills`
+/// location those tools now read. Best-effort and idempotent: a fast no-op once
+/// there are no legacy integrations left.
+///
+/// Returns `Ok(true)` if a migration was performed.
+pub fn migrate_legacy_integrations(lock: &ConfigLock) -> Result<bool> {
+    const LEGACY: [&str; 3] = ["codex", "gemini-cli", "opencode"];
+
+    let config = lock.read_config()?;
+    let present: Vec<&str> = LEGACY
+        .iter()
+        .copied()
+        .filter(|name| config.has_integration(name))
+        .collect();
+    if present.is_empty() {
+        return Ok(false);
+    }
+
+    let enabled_skills: Vec<String> = config
+        .enabled_skills()
+        .iter()
+        .map(|(name, _)| (*name).clone())
+        .collect();
+
+    // 1. Remove this manager's skill symlinks from the legacy integration dirs
+    //    (only entries that are symlinks — never touch user-placed files).
+    for name in &present {
+        if let Some(integration) = config.integrations.get(*name)
+            && let Some(dir) = integration.skills_dir.as_ref()
+        {
+            let dir = PathBuf::from(dir);
+            for skill in &enabled_skills {
+                let link = dir.join(skill);
+                if link.is_symlink() {
+                    std::fs::remove_file(&link).ok();
+                }
+            }
+        }
+    }
+
+    // 2. Config: replace the legacy integrations with the unified `agents` one.
+    let agents_dir =
+        paths::get_builtin_skills_dir("agents").map(|p| p.to_string_lossy().to_string());
+    let mut migrated: Vec<String> = Vec::new();
+    lock.update(|config| {
+        migrated = config.unify_legacy_integrations(agents_dir.clone());
+        Ok(())
+    })?;
+
+    // 3. Symlink all enabled skills into the unified skills directory.
+    if let Some(dir) = agents_dir.as_ref() {
+        let dir = PathBuf::from(dir);
+        std::fs::create_dir_all(&dir).ok();
+        let config = lock.read_config()?;
+        for skill_name in &enabled_skills {
+            if let Some(skill) = config.skills.get(skill_name)
+                && let Ok(repo_ref) = RepoRef::parse(&skill.repository)
+                && let Ok(cache) = paths::resolve_repo_cache_path(&repo_ref)
+            {
+                let source = cache.join(&skill.skill_path);
+                if source.exists() {
+                    create_skill_symlink(&source, &dir.join(skill_name)).ok();
+                }
+            }
+        }
+    }
+
+    eprintln!(
+        "{} Migrated {} to the unified `agents` integration ({}). Codex, Gemini CLI, and OpenCode all read this location now.",
+        style("Note:").yellow(),
+        migrated.join(", "),
+        agents_dir.as_deref().unwrap_or("~/.agents/skills")
+    );
+
+    Ok(true)
+}
+
 /// Remove an integration
 pub fn remove(name: &str) -> Result<()> {
     let lock = ConfigLock::acquire()?;
@@ -311,13 +389,20 @@ pub fn configure() -> Result<()> {
 
     let builtin = paths::builtin_integrations();
 
-    // Build options showing both skills and agents directories
+    // Build options showing the skills directory (and agents dir when present),
+    // plus a short description of what each integration covers.
     let options: Vec<String> = builtin
         .iter()
         .map(|bi| {
-            let skills = bi.skills_dir.unwrap_or("-");
-            let agents = bi.agents_dir.unwrap_or("-");
-            format!("{} (skills: {}, agents: {})", bi.name, skills, agents)
+            let mut label = format!("{} (skills: {}", bi.name, bi.skills_dir.unwrap_or("-"));
+            if let Some(agents) = bi.agents_dir {
+                label.push_str(&format!(", agents: {}", agents));
+            }
+            label.push(')');
+            if let Some(desc) = bi.description {
+                label.push_str(&format!("  —  {}", desc));
+            }
+            label
         })
         .collect();
 

@@ -63,8 +63,8 @@ After installation, configure which coding agents you use:
 sm configure
 
 # Or add individually
-sm integrations add claude-code
-sm integrations add opencode
+sm integrations add claude-code   # ~/.claude/skills
+sm integrations add agents        # ~/.agents/skills (Codex, Gemini CLI, OpenCode, …)
 ```
 
 Then add skills:
@@ -259,11 +259,9 @@ Configure which coding agents receive your skills:
 # Interactive setup
 sm configure
 
-# Add built-in integrations
-sm integrations add claude-code    # ~/.claude/skills/
-sm integrations add opencode       # ~/.config/opencode/skill/
-sm integrations add codex          # ~/.codex/skills/
-sm integrations add gemini-cli     # ~/.gemini/skills/
+# Built-in integrations
+sm integrations add claude-code    # ~/.claude/skills
+sm integrations add agents         # ~/.agents/skills
 
 # Add custom integration
 sm integrations add cursor --path ~/.cursor/skills
@@ -275,7 +273,10 @@ sm integrations list
 sm integrations remove cursor
 ```
 
-Aliases are supported: `claude` → `claude-code`, `gemini` → `gemini-cli`
+There are two built-in integrations:
+
+- **`claude-code`** → `~/.claude/skills` (Claude Code uses its own location).
+- **`agents`** → `~/.agents/skills`, the shared standard location read by **Codex, Gemini CLI, OpenCode**, and other SKILL.md-compatible tools. Adding `codex`, `gemini-cli`, or `opencode` (or `claude`/`gemini` aliases) resolves to this unified `agents` integration. If you upgraded from a version that had separate `codex`/`gemini-cli`/`opencode` integrations, they're migrated to `agents` automatically on first run.
 
 ## Command Aliases
 

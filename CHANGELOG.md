@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Changed
+
+- **Unified the coding-agent integrations onto the shared `~/.agents/skills` standard.** Codex, Gemini CLI, and OpenCode all read `~/.agents/skills` now, so the four previous per-tool integrations collapse into two built-ins: `claude-code` (→ `~/.claude/skills`) and `agents` (→ `~/.agents/skills`, covering Codex, Gemini CLI, OpenCode, and other SKILL.md-compatible tools). This also corrects the previously outdated `codex` and `opencode` paths. Adding `codex`/`gemini-cli`/`opencode` by name resolves to the unified `agents` integration.
+- **Automatic migration on upgrade.** If you had `codex`, `gemini-cli`, or `opencode` integrations configured, they are migrated to the unified `agents` integration on the first run: the old entries are replaced, your enabled skills are re-symlinked into `~/.agents/skills`, and the old symlinks are cleaned up. Subagents remain Claude-only, as there's no shared subagent-directory standard yet.
+
 ## Version 0.0.10 (2026-06-14)
 
 ### Fixed

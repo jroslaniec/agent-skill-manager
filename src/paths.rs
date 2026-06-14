@@ -42,16 +42,17 @@ pub fn ensure_dirs() -> Result<()> {
     Ok(())
 }
 
-/// Normalize integration name to canonical form
-/// e.g., "claude", "Claude", "claudecode" -> "claude-code"
-/// e.g., "opencode", "open-code", "OpenCode" -> "opencode"
+/// Normalize integration name to canonical form.
+///
+/// Claude Code keeps its own `claude-code` location. Codex, Gemini CLI, and
+/// OpenCode all read the shared `~/.agents/skills` location, so they (and their
+/// aliases) normalize to a single unified `agents` integration.
 pub fn normalize_integration_name(input: &str) -> String {
     let lower = input.to_lowercase().replace(['-', '_'], "");
     match lower.as_str() {
         "claude" | "claudecode" => "claude-code".to_string(),
-        "opencode" => "opencode".to_string(),
-        "codex" | "openaicodex" | "codexcli" => "codex".to_string(),
-        "gemini" | "geminicli" => "gemini-cli".to_string(),
+        "agents" | "agent" | "codex" | "openaicodex" | "codexcli" | "gemini" | "geminicli"
+        | "opencode" => "agents".to_string(),
         _ => input.to_lowercase(),
     }
 }
@@ -60,27 +61,23 @@ pub fn normalize_integration_name(input: &str) -> String {
 /// Returns None for unknown integrations (require --path flag)
 pub fn get_builtin_skills_dir(name: &str) -> Option<PathBuf> {
     let home = dirs::home_dir()?;
-    let normalized = normalize_integration_name(name);
-    match normalized.as_str() {
+    match normalize_integration_name(name).as_str() {
         "claude-code" => Some(home.join(".claude").join("skills")),
-        "opencode" => Some(home.join(".config").join("opencode").join("skill")),
-        "codex" => Some(home.join(".codex").join("skills")),
-        "gemini-cli" => Some(home.join(".gemini").join("skills")),
+        // Shared location read by Codex, Gemini CLI, OpenCode, and other
+        // SKILL.md-compatible tools.
+        "agents" => Some(home.join(".agents").join("skills")),
         _ => None,
     }
 }
 
 /// Get the default agents directory for a built-in integration
-/// Returns None for integrations that don't support agents (e.g., codex uses AGENTS.md)
+/// Returns None for integrations without a (known) per-agent subagent directory.
 pub fn get_builtin_agents_dir(name: &str) -> Option<PathBuf> {
     let home = dirs::home_dir()?;
-    let normalized = normalize_integration_name(name);
-    match normalized.as_str() {
+    match normalize_integration_name(name).as_str() {
         "claude-code" => Some(home.join(".claude").join("agents")),
-        "opencode" => Some(home.join(".config").join("opencode").join("agent")),
-        "gemini-cli" => Some(home.join(".gemini").join("agents")),
-        // codex uses AGENTS.md, not individual agent files
-        "codex" => None,
+        // The shared skills location has no agreed subagent directory yet, so the
+        // unified `agents` integration manages skills only.
         _ => None,
     }
 }
@@ -90,6 +87,8 @@ pub struct BuiltinIntegration {
     pub name: &'static str,
     pub skills_dir: Option<&'static str>,
     pub agents_dir: Option<&'static str>,
+    /// Short note shown in `sm configure` (e.g. which tools an entry covers).
+    pub description: Option<&'static str>,
 }
 
 /// List of known built-in integrations with their default paths
@@ -99,21 +98,13 @@ pub fn builtin_integrations() -> Vec<BuiltinIntegration> {
             name: "claude-code",
             skills_dir: Some("~/.claude/skills"),
             agents_dir: Some("~/.claude/agents"),
+            description: Some("Claude Code"),
         },
         BuiltinIntegration {
-            name: "codex",
-            skills_dir: Some("~/.codex/skills"),
-            agents_dir: None, // codex uses AGENTS.md
-        },
-        BuiltinIntegration {
-            name: "gemini-cli",
-            skills_dir: Some("~/.gemini/skills"),
-            agents_dir: Some("~/.gemini/agents"),
-        },
-        BuiltinIntegration {
-            name: "opencode",
-            skills_dir: Some("~/.config/opencode/skill"),
-            agents_dir: Some("~/.config/opencode/agent"),
+            name: "agents",
+            skills_dir: Some("~/.agents/skills"),
+            agents_dir: None,
+            description: Some("Codex, Gemini CLI, OpenCode, and other SKILL.md tools"),
         },
     ]
 }
@@ -223,8 +214,12 @@ mod tests {
         assert_eq!(normalize_integration_name("Claude"), "claude-code");
         assert_eq!(normalize_integration_name("claudecode"), "claude-code");
         assert_eq!(normalize_integration_name("claude-code"), "claude-code");
-        assert_eq!(normalize_integration_name("opencode"), "opencode");
-        assert_eq!(normalize_integration_name("codex"), "codex");
+        // Codex, Gemini CLI, and OpenCode all map to the unified `agents`.
+        assert_eq!(normalize_integration_name("agents"), "agents");
+        assert_eq!(normalize_integration_name("codex"), "agents");
+        assert_eq!(normalize_integration_name("gemini-cli"), "agents");
+        assert_eq!(normalize_integration_name("gemini"), "agents");
+        assert_eq!(normalize_integration_name("opencode"), "agents");
         assert_eq!(normalize_integration_name("custom"), "custom");
     }
 
@@ -337,20 +332,43 @@ mod tests {
     fn test_builtin_integrations() {
         let integrations = builtin_integrations();
 
-        // Should have 4 built-in integrations
-        assert_eq!(integrations.len(), 4);
+        // Two built-ins: claude-code and the unified agents integration.
+        assert_eq!(integrations.len(), 2);
 
-        // Verify claude-code is present with both directories
-        let claude = integrations.iter().find(|bi| bi.name == "claude-code");
-        assert!(claude.is_some());
-        let claude = claude.unwrap();
+        // claude-code keeps both directories.
+        let claude = integrations
+            .iter()
+            .find(|bi| bi.name == "claude-code")
+            .unwrap();
         assert_eq!(claude.skills_dir, Some("~/.claude/skills"));
         assert_eq!(claude.agents_dir, Some("~/.claude/agents"));
 
-        // Verify codex has no agents_dir
-        let codex = integrations.iter().find(|bi| bi.name == "codex");
-        assert!(codex.is_some());
-        assert!(codex.unwrap().agents_dir.is_none());
+        // The unified `agents` integration targets the shared skills location and
+        // manages skills only.
+        let agents = integrations.iter().find(|bi| bi.name == "agents").unwrap();
+        assert_eq!(agents.skills_dir, Some("~/.agents/skills"));
+        assert!(agents.agents_dir.is_none());
+    }
+
+    #[test]
+    fn test_get_builtin_skills_dir() {
+        assert!(
+            get_builtin_skills_dir("claude-code")
+                .unwrap()
+                .to_string_lossy()
+                .contains(".claude/skills")
+        );
+        // Codex / Gemini / OpenCode all resolve to the shared ~/.agents/skills.
+        for name in ["agents", "codex", "gemini-cli", "opencode"] {
+            assert!(
+                get_builtin_skills_dir(name)
+                    .unwrap()
+                    .to_string_lossy()
+                    .contains(".agents/skills"),
+                "{name} should resolve to ~/.agents/skills"
+            );
+        }
+        assert!(get_builtin_skills_dir("unknown").is_none());
     }
 
     #[test]
@@ -360,9 +378,9 @@ mod tests {
         assert!(claude.is_some());
         assert!(claude.unwrap().to_string_lossy().contains(".claude"));
 
-        // Codex should not have agents dir
-        let codex = get_builtin_agents_dir("codex");
-        assert!(codex.is_none());
+        // The unified agents integration is skills-only.
+        assert!(get_builtin_agents_dir("agents").is_none());
+        assert!(get_builtin_agents_dir("codex").is_none());
 
         // Unknown integration should return None
         let unknown = get_builtin_agents_dir("unknown");
