@@ -25,37 +25,27 @@ pub fn enable_with_lock(lock: &ConfigLock, agent_names_or_refs: &[String]) -> Re
     for agent_name_or_ref in agent_names_or_refs {
         let config = lock.read_config()?;
 
-        // Check if this is just an agent name (already registered)
+        // Already registered: enable by name.
         if config.has_agent(agent_name_or_ref) {
-            // Re-enable existing agent by name
-            if config.agents.get(agent_name_or_ref).unwrap().enabled {
-                println!(
-                    "Agent {} is already enabled",
-                    style(agent_name_or_ref).cyan()
-                );
-                continue;
-            }
-
-            lock.update(|config| config.enable_agent(agent_name_or_ref))?;
-
-            // Create symlinks in all integrations
-            let config = lock.read_config()?;
-            let agent_info = config.agents.get(agent_name_or_ref).unwrap();
-
-            // Get the source path to the AGENT.md file (resolve handles legacy paths)
-            let repo_ref = RepoRef::parse(&agent_info.repository)?;
-            let repo_cache_path = paths::resolve_repo_cache_path(&repo_ref)?;
-            let source_path = repo_cache_path
-                .join(&agent_info.agent_path)
-                .join("AGENT.md");
-
-            create_agent_symlinks_for_all_integrations(&source_path, agent_name_or_ref, &config)?;
-
-            println!("Enabled agent {}", style(agent_name_or_ref).cyan());
+            enable_registered_agent(lock, agent_name_or_ref)?;
             continue;
         }
 
-        // Not found by name - agent must be registered first via sm repo add
+        // A bare name missing from config may be an agent present on disk inside a
+        // registered repository (config/disk drift — e.g. enabling an agent that
+        // interactive mode discovered on disk). Register it, then enable by name.
+        if let Some((repo_id, agent_path)) = find_disk_agent(&config, agent_name_or_ref)? {
+            let name = agent_name_or_ref.clone();
+            lock.update(|config| {
+                config.add_agent(name.clone(), repo_id.clone(), agent_path.clone());
+                config.disable_agent(&name).ok();
+                Ok(())
+            })?;
+            enable_registered_agent(lock, agent_name_or_ref)?;
+            continue;
+        }
+
+        // Not found by name or on disk - agent must be registered first via sm repo add
         bail!(
             "Agent '{}' not found. Use 'sm repo add' to add a repository first, then enable agents by name.\nUse 'sm subagents list --all' to see available agents.",
             agent_name_or_ref
@@ -63,6 +53,66 @@ pub fn enable_with_lock(lock: &ConfigLock, agent_names_or_refs: &[String]) -> Re
     }
 
     Ok(())
+}
+
+/// Enable an agent that is already registered in config (by name): flip it on and
+/// recreate its integration symlinks. No-op (with a message) if already enabled.
+fn enable_registered_agent(lock: &ConfigLock, name: &str) -> Result<()> {
+    let config = lock.read_config()?;
+    if config.agents.get(name).map(|a| a.enabled).unwrap_or(false) {
+        println!("Agent {} is already enabled", style(name).cyan());
+        return Ok(());
+    }
+
+    lock.update(|config| config.enable_agent(name))?;
+
+    let config = lock.read_config()?;
+    let agent_info = config.agents.get(name).unwrap();
+    // Get the source path to the AGENT.md file (resolve handles legacy paths)
+    let repo_ref = RepoRef::parse(&agent_info.repository)?;
+    let repo_cache_path = paths::resolve_repo_cache_path(&repo_ref)?;
+    let source_path = repo_cache_path
+        .join(&agent_info.agent_path)
+        .join("AGENT.md");
+    create_agent_symlinks_for_all_integrations(&source_path, name, &config)?;
+
+    println!("Enabled agent {}", style(name).cyan());
+    Ok(())
+}
+
+/// Find an agent by bare name on disk within a registered repository.
+///
+/// Returns `(repo_id, agent_path)` when `<name>/AGENT.md` exists under some
+/// registered repo's (sub)directory. Mirrors `find_disk_skill` so interactive
+/// selections and `sm subagents enable <name>` work despite config/disk drift.
+fn find_disk_agent(
+    config: &crate::config::state::Config,
+    name: &str,
+) -> Result<Option<(String, String)>> {
+    if name.contains('/') {
+        return Ok(None);
+    }
+
+    for (repo_id, repo) in &config.repositories {
+        let repo_ref = RepoRef::from_stored(repo_id, &repo.url, &repo.path);
+        let cache = paths::resolve_repo_cache_path(&repo_ref)?;
+        let scan_root = if repo.path.is_empty() {
+            cache
+        } else {
+            cache.join(&repo.path)
+        };
+
+        if scan_root.join(name).join("AGENT.md").exists() {
+            let agent_path = if repo.path.is_empty() {
+                name.to_string()
+            } else {
+                format!("{}/{}", repo.path, name)
+            };
+            return Ok(Some((repo_id.clone(), agent_path)));
+        }
+    }
+
+    Ok(None)
 }
 
 /// Disable one or more subagents

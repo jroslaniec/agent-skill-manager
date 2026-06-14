@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- **Interactive mode (and `sm skills enable` / `sm subagents enable`) can now enable a skill or agent that exists on disk in a registered repository but is missing from config.** A bare name not in config was treated as a remote `OWNER/REPO/SKILL` reference and failed with "Not a valid skill reference" (agents: "not found") — even though interactive mode had just listed it from disk. Such names are now matched against the skills/agents present on disk and registered automatically, which also heals config/disk drift (e.g. after a repository's contents changed).
+
 ## Version 0.0.7 (2026-06-14)
 
 ### Fixed

@@ -336,34 +336,29 @@ fn enable_with_lock(lock: &ConfigLock, skill_names_or_refs: &[String]) -> Result
     for skill_name_or_ref in skill_names_or_refs {
         let config = lock.read_config()?;
 
-        // Check if this is just a skill name (already registered)
+        // Already registered: enable by name.
         if config.has_skill(skill_name_or_ref) {
-            // Re-enable existing skill by name
-            if config.skills.get(skill_name_or_ref).unwrap().enabled {
-                println!(
-                    "Skill {} is already enabled",
-                    style(skill_name_or_ref).cyan()
-                );
-                continue;
-            }
-
-            lock.update(|config| config.enable_skill(skill_name_or_ref))?;
-
-            // Create symlinks in all integrations
-            let config = lock.read_config()?;
-            let skill_info = config.skills.get(skill_name_or_ref).unwrap();
-
-            // Parse repository reference and resolve cache path (handles legacy paths)
-            let repo_ref = RepoRef::parse(&skill_info.repository)?;
-            let repo_cache_path = paths::resolve_repo_cache_path(&repo_ref)?;
-            let source_path = repo_cache_path.join(&skill_info.skill_path);
-            create_skill_symlinks_for_all_integrations(&source_path, skill_name_or_ref, &config)?;
-
-            println!("Enabled skill {}", style(skill_name_or_ref).cyan());
+            enable_registered_skill(lock, skill_name_or_ref)?;
             continue;
         }
 
-        // Not found by name, try parsing as full reference
+        // A bare name missing from config may be a skill present on disk inside a
+        // registered repository (config/disk drift — e.g. enabling a skill that
+        // interactive mode discovered on disk, or recovering after a repo's
+        // contents changed). Register it, then enable by name. This avoids
+        // misparsing a plain skill name as a remote OWNER/REPO/SKILL reference.
+        if let Some((repo_id, skill_path)) = find_disk_skill(&config, skill_name_or_ref)? {
+            let name = skill_name_or_ref.clone();
+            lock.update(|config| {
+                config.add_skill(name.clone(), repo_id.clone(), skill_path.clone());
+                config.disable_skill(&name).ok();
+                Ok(())
+            })?;
+            enable_registered_skill(lock, skill_name_or_ref)?;
+            continue;
+        }
+
+        // Otherwise, parse as a full remote reference.
         let skill = SkillRef::parse(skill_name_or_ref)?;
 
         // Check if skill already exists and is enabled
@@ -473,6 +468,65 @@ fn enable_with_lock(lock: &ConfigLock, skill_names_or_refs: &[String]) -> Result
     }
 
     Ok(())
+}
+
+/// Enable a skill that is already registered in config (by name): flip it on and
+/// recreate its integration symlinks. No-op (with a message) if already enabled.
+fn enable_registered_skill(lock: &ConfigLock, name: &str) -> Result<()> {
+    let config = lock.read_config()?;
+    if config.skills.get(name).map(|s| s.enabled).unwrap_or(false) {
+        println!("Skill {} is already enabled", style(name).cyan());
+        return Ok(());
+    }
+
+    lock.update(|config| config.enable_skill(name))?;
+
+    let config = lock.read_config()?;
+    let skill_info = config.skills.get(name).unwrap();
+    // Parse repository reference and resolve cache path (handles legacy paths)
+    let repo_ref = RepoRef::parse(&skill_info.repository)?;
+    let repo_cache_path = paths::resolve_repo_cache_path(&repo_ref)?;
+    let source_path = repo_cache_path.join(&skill_info.skill_path);
+    create_skill_symlinks_for_all_integrations(&source_path, name, &config)?;
+
+    println!("Enabled skill {}", style(name).cyan());
+    Ok(())
+}
+
+/// Find a skill by bare name on disk within a registered repository.
+///
+/// Returns `(repo_id, skill_path)` when `<name>/SKILL.md` exists under some
+/// registered repo's (sub)directory. Used to heal config/disk drift so a skill
+/// surfaced by interactive mode can be enabled even when it is not (yet) in
+/// config. Returns `None` for names containing `/` (those are remote references).
+fn find_disk_skill(
+    config: &crate::config::state::Config,
+    name: &str,
+) -> Result<Option<(String, String)>> {
+    if name.contains('/') {
+        return Ok(None);
+    }
+
+    for (repo_id, repo) in &config.repositories {
+        let repo_ref = RepoRef::from_stored(repo_id, &repo.url, &repo.path);
+        let cache = paths::resolve_repo_cache_path(&repo_ref)?;
+        let scan_root = if repo.path.is_empty() {
+            cache
+        } else {
+            cache.join(&repo.path)
+        };
+
+        if scan_root.join(name).join("SKILL.md").exists() {
+            let skill_path = if repo.path.is_empty() {
+                name.to_string()
+            } else {
+                format!("{}/{}", repo.path, name)
+            };
+            return Ok(Some((repo_id.clone(), skill_path)));
+        }
+    }
+
+    Ok(None)
 }
 
 pub fn disable(skill_names_or_refs: &[String]) -> Result<()> {
@@ -1647,4 +1701,37 @@ fn check_for_updates(repo_id: &str, config: &crate::config::state::Config) -> Re
     }
 
     Ok(None)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::TempDir;
+
+    #[test]
+    fn find_disk_skill_matches_skill_on_disk() {
+        // A local repo whose directory contains `myskill/SKILL.md`.
+        let temp = TempDir::new().unwrap();
+        let skill_dir = temp.path().join("myskill");
+        fs::create_dir_all(&skill_dir).unwrap();
+        fs::write(skill_dir.join("SKILL.md"), "# My Skill\n").unwrap();
+
+        let path_str = temp.path().to_string_lossy().to_string();
+        let repo_id = format!("local:{}", path_str);
+        let mut config = crate::config::state::Config::new();
+        config.add_repository(repo_id.clone(), path_str, String::new(), None, None);
+
+        // Bare name present on disk -> found, with repo id and skill path.
+        assert_eq!(
+            find_disk_skill(&config, "myskill").unwrap(),
+            Some((repo_id, "myskill".to_string()))
+        );
+
+        // Unknown name -> not found.
+        assert_eq!(find_disk_skill(&config, "ghost").unwrap(), None);
+
+        // A reference-looking name (contains '/') is never treated as a bare name.
+        assert_eq!(find_disk_skill(&config, "owner/repo/skill").unwrap(), None);
+    }
 }
