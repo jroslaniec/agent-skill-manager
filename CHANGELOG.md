@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## Version 0.0.10 (2026-06-14)
+
 ### Fixed
 
 - **`sm repo list` columns now align regardless of repository name length.** Column widths are computed from the actual content (and padding ignores ANSI color codes), so long repository ids/paths no longer push the later columns out of alignment. Repositories are also listed in a stable, sorted order.
