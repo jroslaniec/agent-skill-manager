@@ -991,9 +991,13 @@ pub fn manage() -> Result<()> {
     // Show multi-select prompt
     let selected = inquire::MultiSelect::new("Select skills and agents:", options.clone())
         .with_default(&default_indices)
-        .with_help_message("↑↓ to move, Space to toggle, Enter to save, Esc to cancel")
+        .with_help_message(
+            "Type to search, ↑↓ to move, Space to toggle, Enter to save, Esc to cancel",
+        )
         .with_formatter(&|_| String::new())
-        .without_filtering()
+        .with_scorer(&|input, _, string_value, index| {
+            crate::interactive::substring_score(input, string_value, index)
+        })
         .prompt();
 
     let selected_strings = match selected {
@@ -1272,9 +1276,13 @@ fn add_interactive(lock: &ConfigLock, skill_refs: &[String]) -> Result<()> {
 
     let selected = inquire::MultiSelect::new(prompt_text, options.clone())
         .with_default(&default_indices)
-        .with_help_message("↑↓ to move, Space to toggle, Enter to save, Esc to cancel")
+        .with_help_message(
+            "Type to search, ↑↓ to move, Space to toggle, Enter to save, Esc to cancel",
+        )
         .with_formatter(&|_| String::new())
-        .without_filtering()
+        .with_scorer(&|input, _, string_value, index| {
+            crate::interactive::substring_score(input, string_value, index)
+        })
         .prompt();
 
     let selected_options = match selected {
