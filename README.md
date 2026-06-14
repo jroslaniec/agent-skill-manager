@@ -40,6 +40,20 @@ sm self upgrade --force   # reinstall the latest release (repair) without prompt
 
 This re-runs the official installer under the hood and does not modify your shell profile.
 
+Once a day (on an interactive terminal), `sm` quietly checks whether a newer release exists and prints a one-line notice if so. Disable with `SM_NO_UPDATE_CHECK=1`.
+
+### Auto-upgrading repositories
+
+Mark the repositories you own/control so they update themselves in the background, while third-party repositories stay manual:
+
+```bash
+sm repo auto-upgrade on  github.com/you/your-skills   # enable
+sm repo auto-upgrade off github.com/you/your-skills   # disable
+sm repo add --auto-upgrade github.com/you/your-skills # enable at add time
+```
+
+Flagged repositories are pulled to their latest commit by the same once-a-day maintenance pass (skipping pinned repos). `sm repo list` shows an `AUTO-UPGRADE` column. Disable the background pass entirely with `SM_NO_AUTO_UPGRADE=1`.
+
 ## Quick Start
 
 After installation, configure which coding agents you use:

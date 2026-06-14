@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Fixed
+
+- **`sm repo list` columns now align regardless of repository name length.** Column widths are computed from the actual content (and padding ignores ANSI color codes), so long repository ids/paths no longer push the later columns out of alignment. Repositories are also listed in a stable, sorted order.
+
+### Added
+
+- **Automatic once-a-day update notice.** After a command (on an interactive terminal, at most once per 24h), `sm` checks whether a newer release is published and prints a one-line "✨ A new version of sm is available" notice pointing at `sm self upgrade`. Best-effort and silent on failure; disable with `SM_NO_UPDATE_CHECK=1`.
+- **Per-repository auto-upgrade.** Flag a repository with `sm repo auto-upgrade on <url>` (or `sm repo add --auto-upgrade <url>`) and it is pulled to its latest commit automatically by the same once-a-day maintenance pass — third-party repos stay manual unless you opt them in. State is shown in `sm repo list` (new `AUTO-UPGRADE` column). Auto-upgrade and pinning are mutually exclusive (pinning turns it off); local repositories are excluded since they are always live. Disable the background pass with `SM_NO_AUTO_UPGRADE=1`.
+
 ## Version 0.0.9 (2026-06-14)
 
 ### Added
