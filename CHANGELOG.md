@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## Version 0.0.6 (2026-06-14)
+
 ### Added
 
 - **`sm self upgrade`** - Upgrade the `sm` binary itself to the latest published release, in place. Checks the GitHub releases API and, when a newer version exists, re-runs the official installer (with checksum verification). Flags: `--check` reports whether an update is available without installing; `--force` reinstalls the latest release even when already up to date (useful for repairing an install) and skips the confirmation prompt. The upgrade never modifies your shell profile.
