@@ -332,7 +332,10 @@ pub fn configure() -> Result<()> {
     // Show MultiSelect prompt
     let selected = inquire::MultiSelect::new("Select integrations to enable:", options.clone())
         .with_default(&default_indices)
-        .with_help_message("Space to toggle, Enter to confirm, Esc to cancel")
+        .with_help_message("Type to search, Space to toggle, Enter to confirm, Esc to cancel")
+        .with_scorer(&|input, _, string_value, index| {
+            crate::interactive::substring_score(input, string_value, index)
+        })
         .prompt();
 
     let selected_options = match selected {

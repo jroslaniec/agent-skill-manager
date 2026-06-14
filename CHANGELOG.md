@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- **Type-to-search in interactive menus.** The interactive selection menus (`sm`, `sm add -i`, and `sm configure`) now filter as you type, using case-insensitive substring matching on the item name and repository. Matching keeps the original alphabetical order; an empty query shows everything.
+
 ## Version 0.0.8 (2026-06-14)
 
 ### Fixed

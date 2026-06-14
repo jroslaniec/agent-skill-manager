@@ -2,6 +2,7 @@ pub mod cli;
 pub mod commands;
 pub mod config;
 pub mod git;
+pub mod interactive;
 pub mod paths;
 pub mod skill_ref;
 
