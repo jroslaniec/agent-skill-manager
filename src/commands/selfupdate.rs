@@ -93,7 +93,7 @@ pub fn upgrade(check: bool, force: bool) -> Result<()> {
 ///
 /// Shells out to `curl` to stay consistent with the rest of the tool (which
 /// shells out to `git`) and to avoid pulling in an HTTP/async dependency stack.
-fn fetch_latest_version() -> Result<String> {
+pub(crate) fn fetch_latest_version() -> Result<String> {
     let url = format!("https://api.github.com/repos/{REPO}/releases/latest");
 
     let output = Command::new("curl")
@@ -132,7 +132,7 @@ fn parse_tag_name(json: &str) -> Option<String> {
 }
 
 /// Return true if `latest` is a strictly newer version than `current`.
-fn is_newer(latest: &str, current: &str) -> bool {
+pub(crate) fn is_newer(latest: &str, current: &str) -> bool {
     version_tuple(latest) > version_tuple(current)
 }
 

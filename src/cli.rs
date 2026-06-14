@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 
 #[derive(Parser, Debug)]
 #[command(name = "sm")]
@@ -119,12 +119,31 @@ pub enum SelfAction {
     },
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum OnOff {
+    On,
+    Off,
+}
+
 #[derive(Debug, Subcommand)]
 pub enum RepoAction {
     /// Add one or more repositories
     Add {
         /// Repository URLs (e.g., github.com/owner/repo, gitlab.com/owner/repo, or /local/path)
         urls: Vec<String>,
+
+        /// Mark the added repositories for automatic background upgrades
+        #[arg(long)]
+        auto_upgrade: bool,
+    },
+
+    /// Enable or disable automatic background upgrades for a repository
+    AutoUpgrade {
+        /// "on" to enable automatic upgrades, "off" to disable
+        state: OnOff,
+
+        /// Repository URL
+        url: String,
     },
 
     /// Delete one or more repositories

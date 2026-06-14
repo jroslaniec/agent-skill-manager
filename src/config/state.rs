@@ -24,6 +24,12 @@ pub struct Repository {
     pub current_sha: Option<String>, // Current checked-out commit (12 chars)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pinned_sha: Option<String>, // If set, repo is pinned to this SHA
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub auto_upgrade: bool, // If true, upgraded automatically by the daily maintenance pass
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -104,8 +110,19 @@ impl Config {
                 cloned_at: chrono_now(),
                 current_sha,
                 pinned_sha,
+                auto_upgrade: false,
             },
         );
+    }
+
+    /// Enable or disable automatic upgrades for a repository.
+    pub fn set_auto_upgrade(&mut self, repo_id: &str, enabled: bool) -> Result<()> {
+        let repo = self
+            .repositories
+            .get_mut(repo_id)
+            .ok_or_else(|| anyhow::anyhow!("Repository '{}' not found", repo_id))?;
+        repo.auto_upgrade = enabled;
+        Ok(())
     }
 
     /// Remove a repository

@@ -1,5 +1,5 @@
 use agent_skill_manager::cli::{
-    Args, CacheAction, Command, IntegrationAction, RepoAction, SelfAction, SkillAction,
+    Args, CacheAction, Command, IntegrationAction, OnOff, RepoAction, SelfAction, SkillAction,
     SubagentAction,
 };
 use agent_skill_manager::commands;
@@ -11,7 +11,10 @@ fn main() {
     let result = match args.command {
         None => commands::skill::manage(),
         Some(Command::Repositories { action }) => match action {
-            RepoAction::Add { urls } => commands::repo::add(&urls),
+            RepoAction::Add { urls, auto_upgrade } => commands::repo::add(&urls, auto_upgrade),
+            RepoAction::AutoUpgrade { state, url } => {
+                commands::repo::set_auto_upgrade(&url, state == OnOff::On)
+            }
             RepoAction::Delete { urls, force } => commands::repo::delete(&urls, force),
             RepoAction::List => commands::repo::list(),
             RepoAction::Pin { url } => commands::repo::pin(&url),
@@ -74,6 +77,11 @@ fn main() {
             SelfAction::Upgrade { check, force } => commands::selfupdate::upgrade(check, force),
         },
     };
+
+    // Best-effort, once-a-day background maintenance (binary update notice +
+    // auto-upgrade of flagged repos). Runs after the command's own output and
+    // never affects the exit code.
+    commands::maintenance::run_after_command();
 
     if let Err(e) = result {
         eprintln!("Error: {}", e);

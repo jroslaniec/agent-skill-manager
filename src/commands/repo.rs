@@ -10,7 +10,7 @@ use crate::git;
 use crate::paths;
 use crate::skill_ref::RepoRef;
 
-pub fn add(urls: &[String]) -> Result<()> {
+pub fn add(urls: &[String], auto_upgrade: bool) -> Result<()> {
     if urls.is_empty() {
         bail!("At least one repository URL is required");
     }
@@ -20,7 +20,7 @@ pub fn add(urls: &[String]) -> Result<()> {
     let mut success_count = 0;
 
     for url in urls {
-        if let Err(e) = add_single(&lock, url) {
+        if let Err(e) = add_single(&lock, url, auto_upgrade) {
             eprintln!("Error adding {}: {}", url, e);
             had_errors = true;
         } else {
@@ -40,7 +40,7 @@ pub fn add(urls: &[String]) -> Result<()> {
     Ok(())
 }
 
-fn add_single(lock: &ConfigLock, url: &str) -> Result<()> {
+fn add_single(lock: &ConfigLock, url: &str, auto_upgrade: bool) -> Result<()> {
     let repo_ref = RepoRef::parse(url)?;
 
     // Check if repository already exists
@@ -133,6 +133,17 @@ fn add_single(lock: &ConfigLock, url: &str) -> Result<()> {
     let available_skills = scan_for_skills(&full_path)?;
     let available_agents = scan_for_agents(&full_path)?;
 
+    // Auto-upgrade only applies to remote repos; local repos are direct-linked
+    // and always reflect their source, so the flag would be meaningless.
+    if auto_upgrade && is_local {
+        eprintln!(
+            "{} Ignoring --auto-upgrade for local repository {} (local repos are always up to date).",
+            style("Note:").yellow(),
+            style(&repo_ref.repo_id).cyan()
+        );
+    }
+    let set_auto = auto_upgrade && !is_local;
+
     // Add repository and register all skills and agents as disabled
     lock.update(|config| {
         config.add_repository(
@@ -142,6 +153,9 @@ fn add_single(lock: &ConfigLock, url: &str) -> Result<()> {
             current_sha.clone(),
             pinned_sha.clone(),
         );
+        if set_auto {
+            config.set_auto_upgrade(&repo_ref.repo_id, true).ok();
+        }
 
         // Register all detected skills as disabled
         for skill_name in &available_skills {
@@ -372,17 +386,18 @@ pub fn list() -> Result<()> {
 
     // Print header
     println!(
-        "{:<8}  {:<40}  {:>10}  {:>10}  {:<10}  {:<10}",
+        "{:<8}  {:<40}  {:>10}  {:>10}  {:<10}  {:<12}  {:<10}",
         style("SOURCE").bold(),
         style("REPOSITORY").bold(),
         style("SKILLS").bold(),
         style("AGENTS").bold(),
         style("CURRENT").bold(),
+        style("AUTO-UPGRADE").bold(),
         style("PIN").bold()
     );
 
     // Print separator
-    println!("{}", "-".repeat(100));
+    println!("{}", "-".repeat(112));
 
     // Print each repository
     for (repo_id, repo) in &config.repositories {
@@ -422,13 +437,20 @@ pub fn list() -> Result<()> {
             })
             .unwrap_or_else(|| "-".to_string());
 
+        let auto_upgrade_display = if repo.auto_upgrade {
+            style("on").green().to_string()
+        } else {
+            "-".to_string()
+        };
+
         println!(
-            "{:<8}  {:<40}  {:>10}  {:>10}  {:<10}  {}",
+            "{:<8}  {:<40}  {:>10}  {:>10}  {:<10}  {:<12}  {}",
             style(&source_display).magenta(),
             style(repo_id).cyan(),
             style(&skills_display).green(),
             style(&agents_display).blue(),
             style(&current_sha_display).dim(),
+            auto_upgrade_display,
             pinned_sha_display
         );
     }
@@ -460,11 +482,18 @@ pub fn pin(url: &str) -> Result<()> {
 
     let current_sha = git::get_current_sha(&repo_cache_path)?;
 
-    // Update repository to pin it
+    // Update repository to pin it. Pinning freezes the repo, so it also turns
+    // off auto-upgrade (the two are mutually exclusive).
+    let was_auto = config
+        .repositories
+        .get(&repo_ref.repo_id)
+        .map(|r| r.auto_upgrade)
+        .unwrap_or(false);
     lock.update(|config| {
         if let Some(repo) = config.repositories.get_mut(&repo_ref.repo_id) {
             repo.pinned_sha = Some(current_sha.clone());
             repo.current_sha = Some(current_sha.clone());
+            repo.auto_upgrade = false;
         }
         Ok(())
     })?;
@@ -474,6 +503,58 @@ pub fn pin(url: &str) -> Result<()> {
         style(&repo_ref.repo_id).cyan(),
         style(&current_sha).yellow()
     );
+    if was_auto {
+        println!(
+            "{} Auto-upgrade turned off (pinned repositories are not auto-upgraded).",
+            style("Note:").yellow()
+        );
+    }
+
+    Ok(())
+}
+
+/// Enable or disable automatic background upgrades for a repository.
+pub fn set_auto_upgrade(url: &str, enabled: bool) -> Result<()> {
+    let repo_ref = RepoRef::parse(url)?;
+
+    if repo_ref.source_type == crate::skill_ref::GitSourceType::Local {
+        bail!(
+            "Local repositories are always up to date (direct-linked); auto-upgrade does not apply."
+        );
+    }
+
+    let lock = ConfigLock::acquire()?;
+    let config = lock.read_config()?;
+
+    let repo = config.repositories.get(&repo_ref.repo_id).ok_or_else(|| {
+        anyhow::anyhow!(
+            "Repository '{}' is not registered. Use 'sm repo list' to see all repositories.",
+            repo_ref.repo_id
+        )
+    })?;
+
+    if enabled && repo.pinned_sha.is_some() {
+        bail!(
+            "Repository '{}' is pinned. Use 'sm repo unpin' first to allow auto-upgrade.",
+            repo_ref.repo_id
+        );
+    }
+
+    lock.update(|config| config.set_auto_upgrade(&repo_ref.repo_id, enabled))?;
+
+    if enabled {
+        println!(
+            "{} Auto-upgrade enabled for {}",
+            style("✓").green(),
+            style(&repo_ref.repo_id).cyan()
+        );
+    } else {
+        println!(
+            "{} Auto-upgrade disabled for {}",
+            style("✓").green(),
+            style(&repo_ref.repo_id).cyan()
+        );
+    }
 
     Ok(())
 }
@@ -1000,6 +1081,97 @@ pub fn upgrade_all(force: bool) -> Result<()> {
     );
 
     Ok(())
+}
+
+/// Upgrade every repository flagged for auto-upgrade (unpinned, remote).
+///
+/// Quiet by design: only repositories that actually advanced are reported, so a
+/// daily run with no upstream changes prints nothing. Best-effort — a failure on
+/// one repository is reported and does not abort the others. Used by the daily
+/// maintenance pass.
+pub fn auto_upgrade_pass() -> Result<()> {
+    let lock = ConfigLock::acquire()?;
+    let config = lock.read_config()?;
+
+    let targets: Vec<(String, crate::config::state::Repository)> = config
+        .repositories
+        .iter()
+        .filter(|(_, repo)| {
+            repo.auto_upgrade
+                && repo.pinned_sha.is_none()
+                && crate::skill_ref::GitSourceType::from_url(&repo.url)
+                    != crate::skill_ref::GitSourceType::Local
+        })
+        .map(|(id, repo)| (id.clone(), repo.clone()))
+        .collect();
+
+    for (repo_id, repo) in targets {
+        match auto_upgrade_one(&lock, &repo_id, &repo) {
+            Ok(Some((old_sha, new_sha, changes))) => {
+                let old_short = &old_sha[..old_sha.len().min(8)];
+                println!(
+                    "{} auto-upgraded {} ({} → {})",
+                    style("↻").cyan(),
+                    style(&repo_id).cyan(),
+                    style(old_short).dim(),
+                    style(&new_sha).cyan()
+                );
+                print_repo_changes(&changes);
+            }
+            Ok(None) => {} // already at latest — stay quiet
+            Err(e) => {
+                eprintln!(
+                    "{} auto-upgrade of {} failed: {}",
+                    style("⚠").yellow(),
+                    repo_id,
+                    e
+                );
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Pull a single auto-upgrade repository to latest and reconcile its skills and
+/// agents. Returns `Some((old_sha, new_sha, changes))` if it actually moved, or
+/// `None` if it was already at the latest commit.
+fn auto_upgrade_one(
+    lock: &ConfigLock,
+    repo_id: &str,
+    repo: &crate::config::state::Repository,
+) -> Result<Option<(String, String, RepoChanges)>> {
+    let repo_ref = RepoRef::from_stored(repo_id, &repo.url, &repo.path);
+    let repo_cache_path = paths::resolve_repo_cache_path(&repo_ref)?;
+    let old_sha = repo
+        .current_sha
+        .clone()
+        .unwrap_or_else(|| "unknown".to_string());
+
+    let new_sha = git::pull_to_latest(&repo_cache_path)?;
+    if new_sha == old_sha {
+        return Ok(None);
+    }
+
+    let mut changes = None;
+    lock.update(|config| {
+        if let Some(repo) = config.repositories.get_mut(repo_id) {
+            repo.current_sha = Some(new_sha.clone());
+        }
+        changes = Some(refresh_repo_items(
+            config,
+            repo_id,
+            &repo_cache_path,
+            &repo_ref.path,
+        )?);
+        Ok(())
+    })?;
+
+    Ok(Some((
+        old_sha,
+        new_sha,
+        changes.expect("refresh_repo_items runs inside lock.update"),
+    )))
 }
 
 /// Scan a directory for skills (directories containing SKILL.md)
