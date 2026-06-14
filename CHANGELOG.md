@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- **The "new version available" notice now shows on every command until you upgrade**, instead of only on the once-a-day check run. The latest-version lookup is still gated to once per 24h; the notice itself is printed from the last known latest version on each run (interactive terminal only), so it keeps reminding you until `sm self upgrade` actually brings you up to date. It stops once you're current and still respects `SM_NO_UPDATE_CHECK=1`. A transient lookup failure no longer discards a previously-found update.
+
 ## Version 0.0.11 (2026-06-14)
 
 ### Changed
