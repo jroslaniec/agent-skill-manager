@@ -283,6 +283,37 @@ impl Config {
         self.integrations.remove(name)
     }
 
+    /// Replace legacy per-tool integrations (`codex`, `gemini-cli`, `opencode`)
+    /// with the unified `agents` integration that targets the shared skills
+    /// location all of those tools now read.
+    ///
+    /// Returns the legacy integration names that were present (empty if there
+    /// was nothing to migrate). When at least one was present and `agents` isn't
+    /// already registered, it is added (skills-only) with `agents_skills_dir`.
+    pub fn unify_legacy_integrations(&mut self, agents_skills_dir: Option<String>) -> Vec<String> {
+        const LEGACY: [&str; 3] = ["codex", "gemini-cli", "opencode"];
+
+        let present: Vec<String> = LEGACY
+            .iter()
+            .copied()
+            .filter(|name| self.integrations.contains_key(*name))
+            .map(|name| name.to_string())
+            .collect();
+
+        if present.is_empty() {
+            return present;
+        }
+
+        for name in &present {
+            self.integrations.remove(name);
+        }
+        if !self.integrations.contains_key("agents") {
+            self.add_integration("agents".to_string(), agents_skills_dir, None);
+        }
+
+        present
+    }
+
     /// Get all enabled skills
     pub fn enabled_skills(&self) -> Vec<(&String, &Skill)> {
         self.skills
@@ -635,5 +666,69 @@ enabled_at = "2024-01-01T00:00:00Z"
         // Custom integration should not get agents_dir added
         let integration = config.integrations.get("my-custom").unwrap();
         assert!(integration.agents_dir.is_none());
+    }
+
+    #[test]
+    fn test_unify_legacy_integrations() {
+        let mut config = Config::new();
+        config.add_integration("codex".to_string(), Some("/old/codex".to_string()), None);
+        config.add_integration(
+            "gemini-cli".to_string(),
+            Some("/old/gemini".to_string()),
+            Some("/old/gemini-agents".to_string()),
+        );
+        config.add_integration(
+            "claude-code".to_string(),
+            Some("/c/skills".to_string()),
+            Some("/c/agents".to_string()),
+        );
+
+        let migrated = config.unify_legacy_integrations(Some("/home/.agents/skills".to_string()));
+
+        // Both legacy integrations migrated; claude-code untouched.
+        assert_eq!(migrated.len(), 2);
+        assert!(migrated.contains(&"codex".to_string()));
+        assert!(migrated.contains(&"gemini-cli".to_string()));
+        assert!(!config.has_integration("codex"));
+        assert!(!config.has_integration("gemini-cli"));
+        assert!(config.has_integration("claude-code"));
+
+        // Unified agents integration added (skills-only) with the shared dir.
+        let agents = config.integrations.get("agents").unwrap();
+        assert_eq!(agents.skills_dir, Some("/home/.agents/skills".to_string()));
+        assert!(agents.agents_dir.is_none());
+    }
+
+    #[test]
+    fn test_unify_legacy_integrations_noop_when_none() {
+        let mut config = Config::new();
+        config.add_integration(
+            "claude-code".to_string(),
+            Some("/c/skills".to_string()),
+            None,
+        );
+
+        let migrated = config.unify_legacy_integrations(Some("/home/.agents/skills".to_string()));
+
+        assert!(migrated.is_empty());
+        assert!(!config.has_integration("agents"));
+    }
+
+    #[test]
+    fn test_unify_legacy_integrations_keeps_existing_agents() {
+        // If `agents` is already present, it isn't overwritten.
+        let mut config = Config::new();
+        config.add_integration("opencode".to_string(), Some("/old/oc".to_string()), None);
+        config.add_integration(
+            "agents".to_string(),
+            Some("/existing/agents".to_string()),
+            None,
+        );
+
+        let migrated = config.unify_legacy_integrations(Some("/home/.agents/skills".to_string()));
+
+        assert_eq!(migrated, vec!["opencode".to_string()]);
+        let agents = config.integrations.get("agents").unwrap();
+        assert_eq!(agents.skills_dir, Some("/existing/agents".to_string()));
     }
 }

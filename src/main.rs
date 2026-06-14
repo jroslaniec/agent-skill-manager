@@ -3,10 +3,19 @@ use agent_skill_manager::cli::{
     SubagentAction,
 };
 use agent_skill_manager::commands;
+use agent_skill_manager::config::ConfigLock;
 use clap::Parser;
 
 fn main() {
     let args = Args::parse();
+
+    // Best-effort one-time migration of legacy per-tool integrations (codex,
+    // gemini-cli, opencode) to the unified `agents` integration. Runs before the
+    // command so it sees migrated state; cheap no-op once there's nothing to do.
+    // The lock is scoped to this block so it's released before the command runs.
+    if let Ok(lock) = ConfigLock::acquire() {
+        let _ = commands::integration::migrate_legacy_integrations(&lock);
+    }
 
     let result = match args.command {
         None => commands::skill::manage(),
