@@ -28,6 +28,18 @@ curl --proto '=https' --tlsv1.2 -LsSf https://github.com/jroslaniec/agent-skill-
 cargo install --path .
 ```
 
+## Updating
+
+Upgrade `sm` to the latest release in place:
+
+```bash
+sm self upgrade           # upgrade if a newer version is available
+sm self upgrade --check   # just report whether an update exists
+sm self upgrade --force   # reinstall the latest release (repair) without prompting
+```
+
+This re-runs the official installer under the hood and does not modify your shell profile.
+
 ## Quick Start
 
 After installation, configure which coding agents you use:

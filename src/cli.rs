@@ -96,6 +96,27 @@ pub enum Command {
     /// Interactive setup - choose which integrations to enable
     #[command(visible_alias = "config")]
     Configure,
+
+    /// Manage the sm binary itself (e.g. self-upgrade)
+    #[command(name = "self")]
+    SelfManage {
+        #[command(subcommand)]
+        action: SelfAction,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum SelfAction {
+    /// Upgrade sm to the latest released version
+    Upgrade {
+        /// Only check whether a newer version exists; don't install
+        #[arg(long)]
+        check: bool,
+
+        /// Reinstall the latest release even if already up to date, and skip the prompt
+        #[arg(short, long)]
+        force: bool,
+    },
 }
 
 #[derive(Debug, Subcommand)]
