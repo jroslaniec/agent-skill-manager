@@ -81,42 +81,52 @@ pub fn run_after_command() {
     }
 
     let mut state = read_state();
-    if !is_due(&state) {
-        return;
+
+    // The network work — looking up the latest release and pulling auto-upgrade
+    // repos — is gated to once per 24h.
+    if is_due(&state) {
+        // Mark as run now, regardless of outcome, so a flaky network or a slow
+        // upstream doesn't make us retry on every invocation for the rest of the day.
+        state.last_run = Some(chrono::Utc::now().to_rfc3339());
+
+        // Only overwrite the known latest version on a *successful* lookup, so a
+        // transient network failure doesn't wipe a previously-found update.
+        if update_check && let Ok(latest) = crate::commands::selfupdate::fetch_latest_version() {
+            state.latest_version = Some(latest);
+        }
+
+        if auto_upgrade {
+            let _ = crate::commands::repo::auto_upgrade_pass();
+        }
+
+        write_state(&state);
     }
 
-    // Mark as run now, regardless of outcome, so a flaky network or a slow
-    // upstream doesn't make us retry on every invocation for the rest of the day.
-    state.last_run = Some(chrono::Utc::now().to_rfc3339());
-
-    if update_check && let Some(latest) = check_for_binary_update() {
-        state.latest_version = Some(latest);
+    // The "update available" notice is shown on EVERY run from the last known
+    // latest version (not just when the 24h check happens to run), so it keeps
+    // reminding until you actually upgrade.
+    if update_check {
+        notify_if_update_available(state.latest_version.as_deref());
     }
-
-    if auto_upgrade {
-        let _ = crate::commands::repo::auto_upgrade_pass();
-    }
-
-    write_state(&state);
 }
 
-/// Check whether a newer `sm` binary is published; print a one-line notice if so.
-/// Returns the latest version string when the check succeeds.
-fn check_for_binary_update() -> Option<String> {
+/// Print the one-line "new version available" notice if `latest` is newer than
+/// the running binary. A no-op when the latest version is unknown or not newer.
+fn notify_if_update_available(latest: Option<&str>) {
     let current = env!("CARGO_PKG_VERSION");
-    let latest = crate::commands::selfupdate::fetch_latest_version().ok()?;
+    let Some(latest) = latest else {
+        return;
+    };
 
-    if crate::commands::selfupdate::is_newer(&latest, current) {
+    if crate::commands::selfupdate::is_newer(latest, current) {
         eprintln!(
             "\n{} A new version of sm is available: {} → {}. Run `{}`.",
             console::style("✨").yellow(),
             console::style(current).dim(),
-            console::style(&latest).cyan(),
+            console::style(latest).cyan(),
             console::style("sm self upgrade").cyan()
         );
     }
-
-    Some(latest)
 }
 
 #[cfg(test)]
