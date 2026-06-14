@@ -1,5 +1,6 @@
 use agent_skill_manager::cli::{
-    Args, CacheAction, Command, IntegrationAction, RepoAction, SkillAction, SubagentAction,
+    Args, CacheAction, Command, IntegrationAction, RepoAction, SelfAction, SkillAction,
+    SubagentAction,
 };
 use agent_skill_manager::commands;
 use clap::Parser;
@@ -69,6 +70,9 @@ fn main() {
             IntegrationAction::List => commands::integration::list(),
         },
         Some(Command::Configure) => commands::integration::configure(),
+        Some(Command::SelfManage { action }) => match action {
+            SelfAction::Upgrade { check, force } => commands::selfupdate::upgrade(check, force),
+        },
     };
 
     if let Err(e) = result {
